@@ -1,0 +1,34 @@
+name: EAS Update (production)
+
+# Deliberately NOT triggered by push. A human goes to Actions -> this
+# workflow -> Run workflow, picks the branch/tag/commit that's already
+# been verified on the preview channel, and confirms. This is the gate
+# that stops an unattended commit from reaching real users — see the
+# conversation this was set up in for why full auto-push to prod is a bad
+# idea for a med-tracking app specifically.
+on:
+  workflow_dispatch:
+    inputs:
+      message:
+        description: "Update message (shown in eas update:list)"
+        required: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - run: eas update --branch production --message "${{ inputs.message }}" --non-interactive

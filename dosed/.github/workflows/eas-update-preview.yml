@@ -1,0 +1,33 @@
+name: EAS Update (preview)
+
+# Runs on every push to main. Pushes a new OTA update to the "preview"
+# channel only — builds made from the "production" eas.json profile are on
+# the "production" channel and never see these, so a bad commit here can't
+# reach real users. See .github/workflows/eas-update-production.yml for
+# the deliberately manual production push.
+on:
+  push:
+    branches: [main]
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      # Fails the job (and skips the push) if the JS doesn't even
+      # typecheck — the one cheap gate automation shouldn't skip.
+      - run: npx tsc --noEmit
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - run: eas update --branch preview --message "${{ github.event.head_commit.message }}" --non-interactive

@@ -1,0 +1,168 @@
+import * as SecureStore from "expo-secure-store";
+import * as Device from "expo-device";
+
+const ACCESS_KEY = "dosed_access_token";
+const REFRESH_KEY = "dosed_refresh_token";
+
+// Set EXPO_PUBLIC_API_URL in your environment (e.g. an .env file loaded by
+// app.config, or an EAS build profile). EXPO_PUBLIC_ vars are inlined into
+// the JS bundle at build time — fine for a base URL, never put a secret
+// behind this prefix.
+const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3000";
+
+async function getTokens() {
+  const [accessToken, refreshToken] = await Promise.all([
+    SecureStore.getItemAsync(ACCESS_KEY),
+    SecureStore.getItemAsync(REFRESH_KEY),
+  ]);
+  return { accessToken, refreshToken };
+}
+async function storeTokens(accessToken: string, refreshToken: string) {
+  await Promise.all([
+    SecureStore.setItemAsync(ACCESS_KEY, accessToken),
+    SecureStore.setItemAsync(REFRESH_KEY, refreshToken),
+  ]);
+}
+export async function clearTokens() {
+  await Promise.all([SecureStore.deleteItemAsync(ACCESS_KEY), SecureStore.deleteItemAsync(REFRESH_KEY)]);
+}
+export async function isSignedIn(): Promise<boolean> {
+  return !!(await SecureStore.getItemAsync(REFRESH_KEY));
+}
+
+export class ApiClientError extends Error {
+  constructor(public status: number, public code: string) {
+    super(code);
+  }
+}
+
+/** True once, so concurrent 401s during app foreground don't each kick off their own refresh call. */
+let refreshInFlight: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    const { refreshToken } = await getTokens();
+    if (!refreshToken) return null;
+    try {
+      const res = await fetch(`${API_URL}/api/auth/refresh`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (!res.ok) {
+        // Refresh token invalid/expired/reused — nothing recoverable
+        // client-side; the caller (request()) will surface this as a
+        // 401 and the app's root layout treats that as signed-out.
+        await clearTokens();
+        return null;
+      }
+      const { accessToken, refreshToken: nextRefreshToken } = await res.json();
+      await storeTokens(accessToken, nextRefreshToken);
+      return accessToken;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
+}
+
+async function authedFetch(path: string, options: RequestInit = {}, isRetry = false): Promise<Response> {
+  const { accessToken } = await getTokens();
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
+      ...options.headers,
+    },
+  });
+
+  if (res.status === 401 && !isRetry) {
+    const body = await res.clone().json().catch(() => ({ error: "" }));
+    if (body.error === "token_expired") {
+      const newAccessToken = await refreshAccessToken();
+      if (newAccessToken) return authedFetch(path, options, true);
+    }
+  }
+  return res;
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const res = await authedFetch(path, { ...options, headers: { "content-type": "application/json", ...options.headers } });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: "unknown_error" }));
+    throw new ApiClientError(res.status, body.error ?? "unknown_error");
+  }
+  if (res.status === 204) return undefined as T;
+  return res.json();
+}
+
+const deviceLabel = () => `${Device.modelName ?? "Unknown device"} (${Device.osName ?? "?"})`;
+
+// --- auth ---
+
+export async function register(email: string, username: string, phone: string | null, password: string) {
+  const { accessToken, refreshToken } = await request<{ accessToken: string; refreshToken: string }>(
+    "/api/auth/register", { method: "POST", body: JSON.stringify({ email, username, phone, password, deviceLabel: deviceLabel() }) }
+  );
+  await storeTokens(accessToken, refreshToken);
+}
+
+export async function login(identifier: string, password: string) {
+  const { accessToken, refreshToken } = await request<{ accessToken: string; refreshToken: string }>(
+    "/api/auth/login", { method: "POST", body: JSON.stringify({ identifier, password, deviceLabel: deviceLabel() }) }
+  );
+  await storeTokens(accessToken, refreshToken);
+}
+
+export async function logout() {
+  const { refreshToken } = await getTokens();
+  if (refreshToken) await request("/api/auth/logout", { method: "POST", body: JSON.stringify({ refreshToken }) }).catch(() => {});
+  await clearTokens();
+}
+
+export const logoutAllDevices = (password: string) => request<void>("/api/auth/logout-all", { method: "POST", body: JSON.stringify({ password }) });
+export const listSessions = () => request<{ sessions: { id: string; deviceLabel: string | null; createdAt: string; lastUsedAt: string | null }[] }>("/api/auth/sessions");
+export const revokeSession = (id: string) => request<void>(`/api/auth/sessions/${id}`, { method: "DELETE" });
+
+// --- account ---
+
+export const me = () => request<{ id: string; email: string; username: string; phone: string | null; emailVerifiedAt: string | null; phoneVerifiedAt: string | null }>("/api/account/me");
+export const resendVerification = () => request<{ alreadyVerified: boolean }>("/api/account/resend-verification", { method: "POST" });
+export const requestPasswordReset = (email: string) => request<{ sent: true }>("/api/account/request-password-reset", { method: "POST", body: JSON.stringify({ email }) });
+export const resetPassword = (token: string, newPassword: string) => request<{ reset: true }>("/api/account/reset-password", { method: "POST", body: JSON.stringify({ token, newPassword }) });
+export const changePassword = (currentPassword: string, newPassword: string) => request<{ changed: true }>("/api/account/change-password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
+export const getAuditLog = () => request<{ events: { eventType: string; ipAddress: string | null; metadata: Record<string, unknown>; createdAt: string }[] }>("/api/account/audit-log");
+
+// --- sync ---
+
+export const pullChanges = (since: string) =>
+  request<{ serverTime: string; pets: any[]; medications: any[]; doseLogs: any[] }>(`/api/sync/pull?since=${encodeURIComponent(since)}`);
+export const pushChanges = (payload: { pets: any[]; medications: any[]; doseLogs: any[] }) =>
+  request<{ serverTime: string }>("/api/sync/push", { method: "POST", body: JSON.stringify(payload) });
+
+// --- photo uploads ---
+// photoUri holds either a local file:// path (not yet uploaded) or an
+// "r2:<key>" marker once uploaded — see src/lib/photos.ts for the upload/
+// download flow built on these two calls.
+
+export const presignPhotoUpload = (petId: string, ext: "jpg" | "png") =>
+  request<{ uploadUrl: string; key: string; contentType: string }>("/api/uploads/presign", { method: "POST", body: JSON.stringify({ petId, ext }) });
+
+/** Deletes the uploaded object from R2. Fire-and-forget from the caller's side — a failed cleanup leaves an orphaned blob, not a broken app. */
+export async function deletePhoto(key: string): Promise<void> {
+  const res = await authedFetch(`/api/uploads/${key}`, { method: "DELETE" });
+  if (!res.ok && res.status !== 404) throw new ApiClientError(res.status, "delete_failed");
+}
+export async function downloadPhoto(key: string): Promise<string> {
+  const res = await authedFetch(`/api/uploads/${key}`);
+  if (!res.ok) throw new ApiClientError(res.status, "download_failed");
+  const buf = await res.arrayBuffer();
+  // FileSystem.writeAsStringAsync wants base64 text, not a Blob — RN has
+  // no Buffer, so convert with a small manual loop instead of adding a
+  // base64 dependency for one call site.
+  let binary = "";
+  const bytes = new Uint8Array(buf);
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}

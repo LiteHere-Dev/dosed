@@ -1,0 +1,32 @@
+# Local dev only. In production, use a managed Postgres instance (Railway,
+# Render, Neon, RDS, ...) instead of running the database in a container
+# yourself — see README for the actual deploy path.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dosed
+      POSTGRES_PASSWORD: dosed
+      POSTGRES_DB: dosed
+    ports: ["5432:5432"]
+    volumes: ["dosed_pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dosed"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgres://dosed:dosed@postgres:5432/dosed
+      JWT_SECRET: dev-only-secret-change-me-please-1234
+      PORT: 3000
+      NODE_ENV: development
+    ports: ["3000:3000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  dosed_pgdata:

@@ -1,0 +1,38 @@
+{
+  "name": "dosed",
+  "version": "1.0.0",
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios"
+  },
+  "dependencies": {
+    "expo": "^57.0.0",
+    "expo-router": "*",
+    "expo-sqlite": "*",
+    "expo-notifications": "*",
+    "expo-print": "*",
+    "expo-sharing": "*",
+    "expo-file-system": "*",
+    "expo-image-picker": "*",
+    "expo-updates": "*",
+    "expo-linking": "*",
+    "expo-constants": "*",
+    "expo-status-bar": "*",
+    "expo-secure-store": "*",
+    "expo-device": "*",
+    "react": "19.2.0",
+    "react-native": "0.83.2",
+    "react-native-safe-area-context": "*",
+    "react-native-screens": "*",
+    "react-native-reanimated": "*",
+    "react-native-worklets": "*",
+    "react-native-gesture-handler": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "@types/react": "~19.2.0"
+  },
+  "private": true
+}
