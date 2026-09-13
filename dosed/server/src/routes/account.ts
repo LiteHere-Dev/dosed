@@ -9,6 +9,7 @@ import { requireAuth, type AuthedRequest } from "../middleware/auth";
 import { hashToken, generateOpaqueToken } from "../lib/tokens";
 import { sendMail } from "../lib/mailer";
 import { revokeAllSessions } from "../lib/authHelpers";
+import { deleteAllWithPrefix } from "../lib/r2";
 import { recordAuditEvent } from "../lib/audit";
 import { sendVerificationEmail } from "./auth";
 import { env } from "../env";
@@ -125,4 +126,85 @@ accountRouter.get("/me", requireAuth, ah(async (req: AuthedRequest, res) => {
   );
   if (!rows[0]) throw new ApiError(404, "not_found");
   res.json(rows[0]);
+}));
+
+// --- data export (GDPR Art. 20 / CCPA right to know) ---
+
+// Everything the account owns, in one JSON file the person can actually
+// keep or hand to another service — this is what "Data portability" in
+// the Privacy Policy refers to. Deliberately excludes password_hash and
+// security_audit_log: the former is a secret, not "your data" in the
+// portability sense, and the latter is about *us* protecting *you*, not
+// something you'd port elsewhere.
+accountRouter.get("/export", requireAuth, ah(async (req: AuthedRequest, res) => {
+  const [user, pets, medications, doseLogs] = await Promise.all([
+    pool.query(
+      `SELECT id, email, username, phone, created_at as "createdAt",
+              email_verified_at as "emailVerifiedAt", phone_verified_at as "phoneVerifiedAt"
+       FROM users WHERE id = $1`, [req.userId]
+    ),
+    pool.query(
+      `SELECT id, name, species, breed, weight_kg as "weightKg", photo_uri as "photoUri", notes,
+              created_at as "createdAt", updated_at as "updatedAt"
+       FROM pets WHERE user_id = $1 AND deleted_at IS NULL`, [req.userId]
+    ),
+    pool.query(
+      `SELECT id, pet_id as "petId", name, dosage_value as "dosageValue", dosage_unit as "dosageUnit",
+              schedule_type as "scheduleType", times, interval_hours as "intervalHours",
+              start_date as "startDate", end_date as "endDate", active, notes, updated_at as "updatedAt"
+       FROM medications WHERE user_id = $1 AND deleted_at IS NULL`, [req.userId]
+    ),
+    pool.query(
+      `SELECT id, medication_id as "medicationId", scheduled_at as "scheduledAt", taken_at as "takenAt",
+              status, amount_taken as "amountTaken", note, updated_at as "updatedAt"
+       FROM dose_logs WHERE user_id = $1 AND deleted_at IS NULL`, [req.userId]
+    ),
+  ]);
+
+  if (!user.rows[0]) throw new ApiError(404, "not_found");
+
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    account: user.rows[0],
+    pets: pets.rows,
+    medications: medications.rows,
+    doseLogs: doseLogs.rows,
+  };
+
+  recordAuditEvent(req.userId!, "data_exported", req, {});
+  res.setHeader("Content-Disposition", "attachment; filename=\"dosed-data-export.json\"");
+  res.json(payload);
+}));
+
+// --- account deletion (GDPR Art. 17 right to erasure) ---
+
+const deleteAccountSchema = z.object({ password: z.string() });
+
+// Step-up auth again (see /logout-all-devices for the same pattern):
+// deleting the account is the single highest-consequence action in the
+// app, so a still-valid access token isn't enough on its own.
+//
+// Order matters here: R2 objects are deleted *before* the DB row, while
+// we still know which userId owns which photos. If this handler died
+// between the two steps, the DB delete (which cascades to pets/
+// medications/dose_logs via ON DELETE CASCADE, and refresh_tokens too —
+// see migrations 001/002) is the one that actually removes the account,
+// so a crash here would at worst orphan some R2 objects rather than
+// leave a half-deleted, still-usable account behind.
+accountRouter.delete("/me", requireAuth, ah(async (req: AuthedRequest, res) => {
+  const { password } = deleteAccountSchema.parse(req.body);
+  const { rows } = await pool.query<{ password_hash: string }>("SELECT password_hash FROM users WHERE id = $1", [req.userId]);
+  const ok = rows[0] && (await bcrypt.compare(password, rows[0].password_hash));
+  if (!ok) throw new ApiError(401, "invalid_current_password");
+
+  await deleteAllWithPrefix(`users/${req.userId}/`);
+
+  // security_audit_log rows use ON DELETE SET NULL (migration 003), so
+  // this specific event is recorded and then immediately loses its
+  // user_id the moment the DELETE below runs — an anonymous record that
+  // an account existed and was deleted, with nothing identifying left.
+  recordAuditEvent(req.userId!, "account_deleted", req, {});
+  await pool.query("DELETE FROM users WHERE id = $1", [req.userId]);
+
+  res.status(204).end();
 }));
