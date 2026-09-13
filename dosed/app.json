@@ -6,13 +6,29 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "plugins": ["expo-router", "expo-sqlite", "expo-image-picker", "expo-updates"],
-    "ios": { "supportsTablet": false, "bundleIdentifier": "com.dosed.app" },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-image-picker",
+      "expo-updates",
+      "expo-secure-store",
+      "expo-sharing",
+      "expo-status-bar"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.dosed.app"
+    },
     "android": {
       "package": "com.dosed.app",
-      "permissions": ["SCHEDULE_EXACT_ALARM", "POST_NOTIFICATIONS"]
+      "permissions": [
+        "SCHEDULE_EXACT_ALARM",
+        "POST_NOTIFICATIONS"
+      ]
     },
-    "runtimeVersion": { "policy": "appVersion" },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "updates": {
       "url": "https://u.expo.dev/REPLACE_AFTER_EAS_INIT"
     }
