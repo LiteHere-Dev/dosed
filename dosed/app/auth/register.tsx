@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { register, ApiClientError } from "@/lib/api";
 import { runSync } from "@/lib/sync";
 import { Button } from "@/components/Button";
+import { Checkbox } from "@/components/Checkbox";
 import { color, font, space, radius } from "@/theme/tokens";
 
 const ERROR_COPY: Record<string, string> = {
@@ -17,6 +18,7 @@ export default function Register() {
   const [username, setUsername] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [stayedSignedIn, setStayedSignedIn] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -25,7 +27,7 @@ export default function Register() {
     if (password.length < 8) return setError("Password needs at least 8 characters.");
     setBusy(true);
     try {
-      await register(email.trim().toLowerCase(), username.trim(), phone.trim() || null, password);
+      await register(email.trim().toLowerCase(), username.trim(), phone.trim() || null, password, stayedSignedIn);
       await runSync();
       router.replace("/");
     } catch (err) {
@@ -45,6 +47,13 @@ export default function Register() {
       <TextInput style={styles.input} placeholder="Username" placeholderTextColor={color.inkFaint} autoCapitalize="none" value={username} onChangeText={setUsername} />
       <TextInput style={styles.input} placeholder="Phone (optional, e.g. +26876123456)" placeholderTextColor={color.inkFaint} keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
       <TextInput style={styles.input} placeholder="Password (min 8 characters)" placeholderTextColor={color.inkFaint} secureTextEntry value={password} onChangeText={setPassword} />
+
+      <Checkbox
+        label="Stay signed in on this device"
+        checked={stayedSignedIn}
+        onChange={setStayedSignedIn}
+      />
+
       {error && <Text style={styles.error}>{error}</Text>}
 
       <Text style={styles.legalNotice}>
@@ -72,8 +81,8 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: color.hairline,
     paddingHorizontal: space.md, paddingVertical: space.sm, marginBottom: space.md,
   },
-  error: { fontFamily: font.body, fontSize: 13, color: color.danger, marginBottom: space.sm },
-  legalNotice: { fontFamily: font.body, fontSize: 12, color: color.inkFaint, textAlign: "center", lineHeight: 17, marginTop: space.xs },
+  error: { fontFamily: font.body, fontSize: 13, color: color.danger, marginTop: space.sm, marginBottom: space.sm },
+  legalNotice: { fontFamily: font.body, fontSize: 12, color: color.inkFaint, textAlign: "center", lineHeight: 17, marginTop: space.md },
   legalLink: { fontFamily: font.body, fontSize: 12, color: color.clayDeep, fontWeight: "600" },
   link: { fontFamily: font.body, fontSize: 14, color: color.clayDeep, textAlign: "center" },
 });

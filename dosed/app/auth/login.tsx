@@ -4,12 +4,14 @@ import { useRouter } from "expo-router";
 import { login, ApiClientError } from "@/lib/api";
 import { runSync } from "@/lib/sync";
 import { Button } from "@/components/Button";
+import { Checkbox } from "@/components/Checkbox";
 import { color, font, space, radius } from "@/theme/tokens";
 
 export default function Login() {
   const router = useRouter();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [stayedSignedIn, setStayedSignedIn] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -17,7 +19,7 @@ export default function Login() {
     setError(null);
     setBusy(true);
     try {
-      await login(identifier.trim(), password);
+      await login(identifier.trim(), password, stayedSignedIn);
       await runSync();
       router.replace("/");
     } catch (err) {
@@ -44,6 +46,13 @@ export default function Login() {
         style={styles.input} placeholder="Password" placeholderTextColor={color.inkFaint}
         secureTextEntry value={password} onChangeText={setPassword}
       />
+
+      <Checkbox
+        label="Stay signed in on this device"
+        checked={stayedSignedIn}
+        onChange={setStayedSignedIn}
+      />
+
       {error && <Text style={styles.error}>{error}</Text>}
 
       <Button label={busy ? "Signing in…" : "Sign in"} onPress={submit} style={{ marginTop: space.md }} />
@@ -73,7 +82,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: color.hairline,
     paddingHorizontal: space.md, paddingVertical: space.sm, marginBottom: space.md,
   },
-  error: { fontFamily: font.body, fontSize: 13, color: color.danger, marginBottom: space.sm },
+  error: { fontFamily: font.body, fontSize: 13, color: color.danger, marginTop: space.sm, marginBottom: space.sm },
   link: { fontFamily: font.body, fontSize: 14, color: color.clayDeep, textAlign: "center" },
   legalNotice: { textAlign: "center", marginTop: space.xxl },
   legalLink: { fontFamily: font.body, fontSize: 12, color: color.inkFaint },

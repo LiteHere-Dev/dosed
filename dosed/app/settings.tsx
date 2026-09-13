@@ -7,6 +7,7 @@ import { me, resendVerification, logout, logoutAllDevices, changePassword, getAu
 import { resetDb } from "@/db/schema";
 import { runSync } from "@/lib/sync";
 import { Button } from "@/components/Button";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { color, font, space, radius } from "@/theme/tokens";
 
 const EVENT_LABEL: Record<string, string> = {
@@ -42,6 +43,8 @@ export default function Settings() {
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
+  const [confirmingDeleteWarning, setConfirmingDeleteWarning] = useState(false);
 
   useFocusEffect(useCallback(() => {
     me().then(setProfile).catch(() => {});
@@ -142,16 +145,7 @@ export default function Settings() {
     }
   };
 
-  const confirmDeletePrompt = () => {
-    Alert.alert(
-      "Delete your account?",
-      "This permanently erases your pets, medications, dose history, and photos from our servers. This cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Continue", style: "destructive", onPress: () => setConfirmingDelete(true) },
-      ]
-    );
-  };
+  const confirmDeletePrompt = () => setConfirmingDeleteWarning(true);
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: color.paper }} contentContainerStyle={{ padding: space.lg }}>
@@ -193,10 +187,7 @@ export default function Settings() {
         </View>
       )}
 
-      <Button label="Sign out" variant="danger" onPress={() => Alert.alert("Sign out?", "This clears Dosed's data from this device (it stays safe on the server).", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Sign out", style: "destructive", onPress: signOut },
-      ])} style={{ marginTop: space.xl }} />
+      <Button label="Sign out" variant="danger" onPress={() => setConfirmingSignOut(true)} style={{ marginTop: space.xl }} />
 
       {confirmingSignOutAll ? (
         <View style={{ marginTop: space.md }}>
@@ -233,6 +224,26 @@ export default function Settings() {
         <Button label="Privacy Policy" variant="quiet" onPress={() => router.push("/legal/privacy")} style={{ marginTop: space.sm }} />
         <Button label="Terms & Conditions" variant="quiet" onPress={() => router.push("/legal/terms")} style={{ marginTop: space.sm }} />
       </View>
+
+      <ConfirmDialog
+        visible={confirmingSignOut}
+        title="Sign out?"
+        message="This clears Dosed's data from this device. It stays safe on the server."
+        confirmLabel="Sign out"
+        destructive
+        onConfirm={() => { setConfirmingSignOut(false); signOut(); }}
+        onCancel={() => setConfirmingSignOut(false)}
+      />
+
+      <ConfirmDialog
+        visible={confirmingDeleteWarning}
+        title="Delete your account?"
+        message="This permanently erases your pets, medications, dose history, and photos from our servers. This cannot be undone."
+        confirmLabel="Continue"
+        destructive
+        onConfirm={() => { setConfirmingDeleteWarning(false); setConfirmingDelete(true); }}
+        onCancel={() => setConfirmingDeleteWarning(false)}
+      />
     </ScrollView>
   );
 }

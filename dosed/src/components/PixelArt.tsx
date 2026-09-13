@@ -116,6 +116,42 @@ export const CAT_PALETTE: Palette = {
   4: color.ink,
 };
 
+// A sloth hanging by one arm from a branch — used by the generic "nothing
+// here yet" placeholder (src/components/NothingHere.tsx), for spots in the
+// app that are intentionally empty rather than broken.
+export const PIXEL_SLOTH_GRID: Grid = [
+  [0,0,0,0,3,3,3,3,3,3,3,3,3,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0],
+  [0,0,0,1,1,2,2,1,1,0,0,0,0,0,0,0],
+  [0,0,0,1,2,4,2,4,1,0,0,0,0,0,0,0],
+  [0,0,0,1,2,2,2,2,1,0,0,0,0,0,0,0],
+  [0,0,0,0,1,5,5,1,0,0,0,0,0,0,0,0],
+  [0,0,1,1,1,5,5,1,1,1,0,0,0,0,0,0],
+  [0,1,1,1,1,5,5,1,1,1,1,0,0,0,0,0],
+  [0,1,1,0,1,5,5,1,0,1,1,0,0,0,0,0],
+  [0,4,1,0,1,1,1,1,0,1,4,0,0,0,0,0],
+  [0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0],
+  [0,0,0,0,4,4,4,4,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+];
+
+export const SLOTH_PALETTE: Palette = {
+  1: color.amber,
+  2: color.clayDeep,
+  3: color.clayDeep,
+  4: color.ink,
+  5: color.paperRaised,
+};
+
+export function PixelSloth({ pixelSize = 5 }: { pixelSize?: number }) {
+  return <PixelArt grid={PIXEL_SLOTH_GRID} palette={SLOTH_PALETTE} pixelSize={pixelSize} />;
+}
+
 export function SnakeAndTree({ pixelSize = 5 }: { pixelSize?: number }) {
   return <PixelArt grid={SNAKE_TREE_GRID} palette={SNAKE_TREE_PALETTE} pixelSize={pixelSize} />;
 }

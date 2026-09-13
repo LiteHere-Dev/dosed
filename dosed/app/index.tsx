@@ -7,7 +7,7 @@ import { runSync } from "@/lib/sync";
 import { DoseRow } from "@/components/DoseRow";
 import { EmptyState } from "@/components/EmptyState";
 import { PixelDog } from "@/components/PixelArt";
-import { color, font, space } from "@/theme/tokens";
+import { color, font, space, radius } from "@/theme/tokens";
 import type { Pet, Medication, DoseStatus } from "@/db/types";
 
 interface Section {
@@ -15,9 +15,16 @@ interface Section {
   data: { med: Medication; scheduledAt: string; status: DoseStatus | "upcoming" }[];
 }
 
+interface Summary {
+  totalPets: number;
+  dosesToday: number;
+  dosesTaken: number;
+}
+
 export default function Today() {
   const router = useRouter();
   const [sections, setSections] = useState<Section[]>([]);
+  const [summary, setSummary] = useState<Summary>({ totalPets: 0, dosesToday: 0, dosesTaken: 0 });
   const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
@@ -29,12 +36,17 @@ export default function Today() {
     const byPet = new Map<string, Section>();
     for (const pet of pets) byPet.set(pet.id, { pet, data: [] });
 
+    let dosesToday = 0;
+    let dosesTaken = 0;
     for (const med of meds) {
       const section = byPet.get(med.petId);
       if (!section) continue;
       for (const dose of expandSchedule(med, dayStart, dayEnd)) {
         const log = logs.get(`${med.id}|${dose.scheduledAt}`);
-        section.data.push({ med, scheduledAt: dose.scheduledAt, status: log?.status ?? "upcoming" });
+        const status = log?.status ?? "upcoming";
+        section.data.push({ med, scheduledAt: dose.scheduledAt, status });
+        dosesToday += 1;
+        if (status === "taken") dosesTaken += 1;
       }
     }
 
@@ -42,6 +54,7 @@ export default function Today() {
       .filter((s) => s.data.length > 0)
       .map((s) => ({ ...s, data: s.data.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt)) }));
     setSections(withDoses);
+    setSummary({ totalPets: pets.length, dosesToday, dosesTaken });
     setLoaded(true);
   }, []);
 
@@ -53,9 +66,14 @@ export default function Today() {
     runSync().catch(() => {});
   };
 
+  // Only worth showing once there's something to summarize — an empty
+  // "0 of 0 pets" card on a brand-new account is noise, not a dashboard.
+  const showSummary = loaded && summary.totalPets > 0;
+
   if (loaded && sections.length === 0) {
     return (
       <View style={{ flex: 1 }}>
+        {showSummary && <SummaryCard summary={summary} />}
         <EmptyState
           title="Nothing due today"
           body="Add a pet and a medication to start tracking doses."
@@ -74,6 +92,7 @@ export default function Today() {
       contentContainerStyle={{ padding: space.lg }}
       sections={sections}
       keyExtractor={(item) => `${item.med.id}|${item.scheduledAt}`}
+      ListHeaderComponent={showSummary ? <SummaryCard summary={summary} /> : null}
       renderSectionHeader={({ section }) => (
         <Pressable onPress={() => router.push(`/pets/${section.pet.id}`)}>
           <Text style={styles.petHeader}>{section.pet.name}</Text>
@@ -93,8 +112,45 @@ export default function Today() {
   );
 }
 
+/**
+ * A compact "how's today going" glance: pet count plus a taken/total ratio.
+ * Deliberately just three numbers, not a chart — this is the first thing
+ * on the screen, and it should answer "am I on track today" in one look,
+ * not ask for a second one.
+ */
+function SummaryCard({ summary }: { summary: Summary }) {
+  const remaining = summary.dosesToday - summary.dosesTaken;
+  return (
+    <View style={styles.summaryCard}>
+      <View style={styles.summaryStat}>
+        <Text style={styles.summaryNumber}>{summary.totalPets}</Text>
+        <Text style={styles.summaryLabel}>{summary.totalPets === 1 ? "pet" : "pets"}</Text>
+      </View>
+      <View style={styles.summaryDivider} />
+      <View style={styles.summaryStat}>
+        <Text style={styles.summaryNumber}>{summary.dosesTaken}/{summary.dosesToday}</Text>
+        <Text style={styles.summaryLabel}>doses today</Text>
+      </View>
+      <View style={styles.summaryDivider} />
+      <View style={styles.summaryStat}>
+        <Text style={[styles.summaryNumber, remaining > 0 && styles.summaryNumberPending]}>{Math.max(remaining, 0)}</Text>
+        <Text style={styles.summaryLabel}>remaining</Text>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   petHeader: { fontFamily: font.heading, fontSize: 20, color: color.ink, marginTop: space.lg, marginBottom: space.sm },
   fab: { position: "absolute", bottom: space.xl, alignSelf: "center", backgroundColor: color.clay, paddingVertical: space.md, paddingHorizontal: space.lg, borderRadius: 999 },
   fabLabel: { fontFamily: font.body, color: color.paper, fontWeight: "700" },
+  summaryCard: {
+    flexDirection: "row", backgroundColor: color.paperRaised, borderRadius: radius.md,
+    borderWidth: 1, borderColor: color.hairline, padding: space.lg, marginBottom: space.md,
+  },
+  summaryStat: { flex: 1, alignItems: "center" },
+  summaryDivider: { width: 1, backgroundColor: color.hairline, marginHorizontal: space.sm },
+  summaryNumber: { fontFamily: font.heading, fontSize: 22, color: color.ink },
+  summaryNumberPending: { color: color.clayDeep },
+  summaryLabel: { fontFamily: font.body, fontSize: 12, color: color.inkFaint, marginTop: 2 },
 });

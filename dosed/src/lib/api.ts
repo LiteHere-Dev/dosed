@@ -10,23 +10,52 @@ const REFRESH_KEY = "dosed_refresh_token";
 // behind this prefix.
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3000";
 
+// "Stay signed in" support: when the person unchecks it at login/register,
+// tokens live only in these module-level variables for the lifetime of the
+// JS process, never written to SecureStore. Killing the app clears them
+// automatically (they're just JS variables), so the next cold start finds
+// nothing persisted and lands back on the login screen — no separate
+// "forget me" cleanup path needed. When checked (the default), tokens are
+// written to SecureStore as before and survive app restarts.
+let memoryAccessToken: string | null = null;
+let memoryRefreshToken: string | null = null;
+
 async function getTokens() {
   const [accessToken, refreshToken] = await Promise.all([
     SecureStore.getItemAsync(ACCESS_KEY),
     SecureStore.getItemAsync(REFRESH_KEY),
   ]);
-  return { accessToken, refreshToken };
+  // Memory values take priority within the same process — they're the ones
+  // this login/register call actually just set, if session-only was chosen.
+  return {
+    accessToken: memoryAccessToken ?? accessToken,
+    refreshToken: memoryRefreshToken ?? refreshToken,
+  };
 }
-async function storeTokens(accessToken: string, refreshToken: string) {
-  await Promise.all([
-    SecureStore.setItemAsync(ACCESS_KEY, accessToken),
-    SecureStore.setItemAsync(REFRESH_KEY, refreshToken),
-  ]);
+async function storeTokens(accessToken: string, refreshToken: string, persist: boolean) {
+  if (persist) {
+    memoryAccessToken = null;
+    memoryRefreshToken = null;
+    await Promise.all([
+      SecureStore.setItemAsync(ACCESS_KEY, accessToken),
+      SecureStore.setItemAsync(REFRESH_KEY, refreshToken),
+    ]);
+  } else {
+    memoryAccessToken = accessToken;
+    memoryRefreshToken = refreshToken;
+    // Clear out anything persisted from an earlier "stay signed in" login —
+    // otherwise a stale disk token would let the next cold start sign back
+    // in automatically, defeating the point of choosing session-only.
+    await Promise.all([SecureStore.deleteItemAsync(ACCESS_KEY), SecureStore.deleteItemAsync(REFRESH_KEY)]);
+  }
 }
 export async function clearTokens() {
+  memoryAccessToken = null;
+  memoryRefreshToken = null;
   await Promise.all([SecureStore.deleteItemAsync(ACCESS_KEY), SecureStore.deleteItemAsync(REFRESH_KEY)]);
 }
 export async function isSignedIn(): Promise<boolean> {
+  if (memoryRefreshToken) return true;
   return !!(await SecureStore.getItemAsync(REFRESH_KEY));
 }
 
@@ -44,6 +73,10 @@ async function refreshAccessToken(): Promise<string | null> {
   refreshInFlight = (async () => {
     const { refreshToken } = await getTokens();
     if (!refreshToken) return null;
+    // A refresh should preserve whichever mode the person originally chose
+    // at login — check this before storeTokens overwrites memoryRefreshToken
+    // below, since that's the only signal of which mode is currently active.
+    const wasSessionOnly = !!memoryRefreshToken;
     try {
       const res = await fetch(`${API_URL}/api/auth/refresh`, {
         method: "POST",
@@ -58,7 +91,7 @@ async function refreshAccessToken(): Promise<string | null> {
         return null;
       }
       const { accessToken, refreshToken: nextRefreshToken } = await res.json();
-      await storeTokens(accessToken, nextRefreshToken);
+      await storeTokens(accessToken, nextRefreshToken, !wasSessionOnly);
       return accessToken;
     } finally {
       refreshInFlight = null;
@@ -100,19 +133,22 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 const deviceLabel = () => `${Device.modelName ?? "Unknown device"} (${Device.osName ?? "?"})`;
 
 // --- auth ---
+// `persistSession` defaults true (the common case). Passing false keeps the
+// session in memory only for this process — the "Stay signed in" checkbox
+// on the login/register screens maps directly to this flag.
 
-export async function register(email: string, username: string, phone: string | null, password: string) {
+export async function register(email: string, username: string, phone: string | null, password: string, persistSession = true) {
   const { accessToken, refreshToken } = await request<{ accessToken: string; refreshToken: string }>(
     "/api/auth/register", { method: "POST", body: JSON.stringify({ email, username, phone, password, deviceLabel: deviceLabel() }) }
   );
-  await storeTokens(accessToken, refreshToken);
+  await storeTokens(accessToken, refreshToken, persistSession);
 }
 
-export async function login(identifier: string, password: string) {
+export async function login(identifier: string, password: string, persistSession = true) {
   const { accessToken, refreshToken } = await request<{ accessToken: string; refreshToken: string }>(
     "/api/auth/login", { method: "POST", body: JSON.stringify({ identifier, password, deviceLabel: deviceLabel() }) }
   );
-  await storeTokens(accessToken, refreshToken);
+  await storeTokens(accessToken, refreshToken, persistSession);
 }
 
 export async function logout() {

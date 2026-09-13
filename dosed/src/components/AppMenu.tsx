@@ -1,10 +1,11 @@
-import { useEffect, useRef } from "react";
-import { Modal, View, Text, Pressable, StyleSheet, Animated, Dimensions, Alert } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Modal, View, Text, Pressable, StyleSheet, Animated, Dimensions } from "react-native";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { logout } from "@/lib/api";
 import { resetDb } from "@/db/schema";
-import { color, font, space, radius } from "@/theme/tokens";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { color, font, space } from "@/theme/tokens";
 
 const PANEL_WIDTH = Math.min(300, Dimensions.get("window").width * 0.8);
 
@@ -20,6 +21,7 @@ interface Props {
 export function AppMenu({ visible, onClose }: Props) {
   const router = useRouter();
   const slide = useRef(new Animated.Value(-PANEL_WIDTH)).current;
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
 
   useEffect(() => {
     Animated.timing(slide, {
@@ -34,43 +36,50 @@ export function AppMenu({ visible, onClose }: Props) {
     router.push(path as never);
   };
 
-  const signOut = () => {
+  const confirmSignOut = async () => {
+    setConfirmingSignOut(false);
     onClose();
-    Alert.alert("Sign out?", "This clears Dosed's data from this device (it stays safe on the server).", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Sign out",
-        style: "destructive",
-        onPress: async () => {
-          await logout();
-          await resetDb();
-          router.replace("/auth/login");
-        },
-      },
-    ]);
+    await logout();
+    // Wipes the local DB too: this device's copy of the data is only a
+    // cache of the account's data, and leaving it behind after sign-out
+    // would let the next person who signs in on this device see it.
+    await resetDb();
+    router.replace("/auth/login");
   };
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <Animated.View style={[styles.panel, { transform: [{ translateX: slide }] }]}>
-        <Text style={styles.brand}>Dosed</Text>
+    <>
+      <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+        <Pressable style={styles.backdrop} onPress={onClose} />
+        <Animated.View style={[styles.panel, { transform: [{ translateX: slide }] }]}>
+          <Text style={styles.brand}>Dosed</Text>
 
-        <View style={styles.nav}>
-          <MenuItem icon="calendar" label="Today" onPress={() => go("/")} />
-          <MenuItem icon="heart" label="Pets" onPress={() => go("/pets")} />
-          <MenuItem icon="settings" label="Settings" onPress={() => go("/settings")} />
-          <View style={styles.divider} />
-          <MenuItem icon="file-text" label="Terms & Conditions" onPress={() => go("/legal/terms")} />
-          <MenuItem icon="shield" label="Privacy Policy" onPress={() => go("/legal/privacy")} />
-        </View>
+          <View style={styles.nav}>
+            <MenuItem icon="calendar" label="Today" onPress={() => go("/")} />
+            <MenuItem icon="heart" label="Pets" onPress={() => go("/pets")} />
+            <MenuItem icon="settings" label="Settings" onPress={() => go("/settings")} />
+            <View style={styles.divider} />
+            <MenuItem icon="file-text" label="Terms & Conditions" onPress={() => go("/legal/terms")} />
+            <MenuItem icon="shield" label="Privacy Policy" onPress={() => go("/legal/privacy")} />
+          </View>
 
-        <Pressable onPress={signOut} style={styles.signOutRow} hitSlop={8}>
-          <Feather name="log-out" size={18} color={color.danger} />
-          <Text style={styles.signOutLabel}>Sign out</Text>
-        </Pressable>
-      </Animated.View>
-    </Modal>
+          <Pressable onPress={() => setConfirmingSignOut(true)} style={styles.signOutRow} hitSlop={8}>
+            <Feather name="log-out" size={18} color={color.danger} />
+            <Text style={styles.signOutLabel}>Sign out</Text>
+          </Pressable>
+        </Animated.View>
+      </Modal>
+
+      <ConfirmDialog
+        visible={confirmingSignOut}
+        title="Sign out?"
+        message="This clears Dosed's data from this device. It stays safe on the server."
+        confirmLabel="Sign out"
+        destructive
+        onConfirm={confirmSignOut}
+        onCancel={() => setConfirmingSignOut(false)}
+      />
+    </>
   );
 }
 
