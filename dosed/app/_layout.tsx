@@ -26,17 +26,24 @@ export default function RootLayout() {
     })();
   }, []);
 
-  // Redirect to /auth once we know the sign-in state, and keep a signed-out
-  // user from navigating back into the app stack via deep link or history.
-  // Auth screens that carry a deep-link token (reset-password, verify-email)
-  // must stay reachable even while signed out, which they are here since
-  // they live under the same "auth" segment as login/register.
+  // Redirect based on sign-in state, re-checked on every navigation (not just
+  // once at launch) so that logging in or registering actually escapes this
+  // effect's own redirect instead of bouncing back to /auth/login. "legal"
+  // screens are public and must stay reachable whether signed in or not —
+  // people need to be able to read the Privacy Policy / Terms from the
+  // login screen, before ever creating an account.
   useEffect(() => {
     if (!ready) return;
-    const inAuthGroup = segments[0] === "auth";
-    if (!authed && !inAuthGroup) router.replace("/auth/login");
-    if (authed && inAuthGroup) router.replace("/");
-  }, [ready, authed, segments]);
+    (async () => {
+      const signedIn = await isSignedIn();
+      setAuthed(signedIn);
+      const inAuthGroup = segments[0] === "auth";
+      const inLegalGroup = segments[0] === "legal";
+      if (inLegalGroup) return; // always reachable, signed in or not
+      if (!signedIn && !inAuthGroup) router.replace("/auth/login");
+      if (signedIn && inAuthGroup) router.replace("/");
+    })();
+  }, [ready, segments]);
 
   // Sync whenever the app comes back to the foreground — covers the common
   // case (another device made changes while this one was backgrounded)
