@@ -64,10 +64,7 @@ export default function Register() {
       </Text>
 
       <Button label={busy ? "Creating account…" : "Create account"} onPress={submit} style={{ marginTop: space.md }} />
-      <Pressable
-        onPress={() => (router.canGoBack() ? router.back() : router.replace("/auth/login"))}
-        style={{ marginTop: space.lg }}
-      >
+      <Pressable onPress={() => router.replace("/auth/login")} style={{ marginTop: space.lg }}>
         <Text style={styles.link}>Already have an account? Sign in</Text>
       </Pressable>
     </View>

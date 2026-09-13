@@ -38,7 +38,7 @@ export default function Onboarding() {
 
   const finish = async () => {
     await markOnboarded();
-    router.push("/auth/register");
+    router.replace("/auth/register");
   };
 
   const next = () => {
