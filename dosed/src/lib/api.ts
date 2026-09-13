@@ -134,6 +134,12 @@ export const resetPassword = (token: string, newPassword: string) => request<{ r
 export const changePassword = (currentPassword: string, newPassword: string) => request<{ changed: true }>("/api/account/change-password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
 export const getAuditLog = () => request<{ events: { eventType: string; ipAddress: string | null; metadata: Record<string, unknown>; createdAt: string }[] }>("/api/account/audit-log");
 
+/** Full account data as one JSON object — GDPR/CCPA data portability. Caller decides what to do with it (write to a file and share, in Settings). */
+export const exportAccountData = () => request<Record<string, unknown>>("/api/account/export");
+
+/** Permanently deletes the account: server wipes R2 photos, then the DB row (which cascades to pets/medications/dose_logs and every session). Irreversible — the caller should confirm with the person before calling this. */
+export const deleteAccount = (password: string) => request<void>("/api/account/me", { method: "DELETE", body: JSON.stringify({ password }) });
+
 // --- sync ---
 
 export const pullChanges = (since: string) =>

@@ -8,6 +8,7 @@
     "ios": "expo start --ios"
   },
   "dependencies": {
+    "@expo/vector-icons": "^15.0.2",
     "expo": "^57.0.0",
     "expo-constants": "~57.0.18",
     "expo-dev-client": "~57.0.19",

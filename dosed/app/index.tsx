@@ -6,6 +6,7 @@ import { expandSchedule } from "@/lib/schedule";
 import { runSync } from "@/lib/sync";
 import { DoseRow } from "@/components/DoseRow";
 import { EmptyState } from "@/components/EmptyState";
+import { PixelDog } from "@/components/PixelArt";
 import { color, font, space } from "@/theme/tokens";
 import type { Pet, Medication, DoseStatus } from "@/db/types";
 
@@ -58,6 +59,7 @@ export default function Today() {
         <EmptyState
           title="Nothing due today"
           body="Add a pet and a medication to start tracking doses."
+          art={<PixelDog pixelSize={8} />}
         />
         <Pressable style={styles.fab} onPress={() => router.push("/pets")}>
           <Text style={styles.fabLabel}>Go to Pets →</Text>

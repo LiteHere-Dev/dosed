@@ -1,7 +1,9 @@
 import { useCallback, useState } from "react";
 import { View, Text, StyleSheet, Alert, ScrollView, TextInput } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import { me, resendVerification, logout, logoutAllDevices, changePassword, getAuditLog, ApiClientError } from "@/lib/api";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
+import { me, resendVerification, logout, logoutAllDevices, changePassword, getAuditLog, exportAccountData, deleteAccount, ApiClientError } from "@/lib/api";
 import { resetDb } from "@/db/schema";
 import { runSync } from "@/lib/sync";
 import { Button } from "@/components/Button";
@@ -19,6 +21,8 @@ const EVENT_LABEL: Record<string, string> = {
   email_verified: "Email verified",
   logout_all_devices: "Signed out of all devices",
   session_revoked: "A session was signed out",
+  data_exported: "Your data was exported",
+  account_deleted: "Account deleted",
 };
 
 export default function Settings() {
@@ -33,6 +37,11 @@ export default function Settings() {
   const [confirmingSignOutAll, setConfirmingSignOutAll] = useState(false);
   const [signOutAllPassword, setSignOutAllPassword] = useState("");
   const [signOutAllError, setSignOutAllError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useFocusEffect(useCallback(() => {
     me().then(setProfile).catch(() => {});
@@ -89,6 +98,59 @@ export default function Settings() {
     } catch (err) {
       setSignOutAllError(err instanceof ApiClientError && err.code === "invalid_current_password" ? "Wrong password." : "Couldn't sign out other devices.");
     }
+  };
+
+  // GDPR Art. 20 / CCPA right to know: write the export to a local file and
+  // hand it straight to the system share sheet, rather than just displaying
+  // it — a JSON blob on screen isn't something most people can actually do
+  // anything with, but "share to Files / Drive / email it to myself" is.
+  const exportData = async () => {
+    setExporting(true);
+    try {
+      const data = await exportAccountData();
+      const path = `${FileSystem.documentDirectory}dosed-data-export.json`;
+      await FileSystem.writeAsStringAsync(path, JSON.stringify(data, null, 2));
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(path, { mimeType: "application/json", dialogTitle: "Your Dosed data" });
+      } else {
+        Alert.alert("Exported", `Saved to ${path}`);
+      }
+    } catch {
+      Alert.alert("Couldn't export", "Check your connection and try again.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Step-up auth for the same reason as sign-out-all, but the stakes are
+  // higher still: this is irreversible. The server wipes R2 photos and
+  // the database row (which cascades to every table that references it)
+  // before this ever returns — there's no "undo" screen after this call
+  // succeeds, which is why the Alert below spells that out before we even
+  // ask for the password.
+  const submitDelete = async () => {
+    setDeleteError(null);
+    setDeleting(true);
+    try {
+      await deleteAccount(deletePassword);
+      await resetDb();
+      router.replace("/auth/login");
+    } catch (err) {
+      setDeleteError(err instanceof ApiClientError && err.code === "invalid_current_password" ? "Wrong password." : "Couldn't delete your account.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const confirmDeletePrompt = () => {
+    Alert.alert(
+      "Delete your account?",
+      "This permanently erases your pets, medications, dose history, and photos from our servers. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Continue", style: "destructive", onPress: () => setConfirmingDelete(true) },
+      ]
+    );
   };
 
   return (
@@ -148,6 +210,25 @@ export default function Settings() {
       )}
 
       <View style={{ marginTop: space.xl }}>
+        <Text style={styles.label}>Your data</Text>
+        <Text style={styles.helpText}>
+          Download a copy of everything Dosed has stored for you, or permanently delete your account.
+        </Text>
+        <Button label={exporting ? "Preparing export…" : "Export my data"} variant="quiet" onPress={exportData} style={{ marginTop: space.sm }} />
+
+        {confirmingDelete ? (
+          <View style={{ marginTop: space.md }}>
+            <Text style={styles.label}>Confirm your password to permanently delete your account</Text>
+            <TextInput style={styles.input} placeholder="Password" placeholderTextColor={color.inkFaint} secureTextEntry value={deletePassword} onChangeText={setDeletePassword} />
+            {deleteError && <Text style={styles.error}>{deleteError}</Text>}
+            <Button label={deleting ? "Deleting…" : "Permanently delete my account"} variant="danger" onPress={submitDelete} />
+          </View>
+        ) : (
+          <Button label="Delete account" variant="danger" onPress={confirmDeletePrompt} style={{ marginTop: space.sm }} />
+        )}
+      </View>
+
+      <View style={{ marginTop: space.xl }}>
         <Text style={styles.label}>Legal</Text>
         <Button label="Privacy Policy" variant="quiet" onPress={() => router.push("/legal/privacy")} style={{ marginTop: space.sm }} />
         <Button label="Terms & Conditions" variant="quiet" onPress={() => router.push("/legal/terms")} style={{ marginTop: space.sm }} />
@@ -159,6 +240,7 @@ export default function Settings() {
 const styles = StyleSheet.create({
   label: { fontFamily: font.body, fontSize: 12, color: color.inkFaint, textTransform: "uppercase" },
   value: { fontFamily: font.heading, fontSize: 17, color: color.ink, marginTop: 2 },
+  helpText: { fontFamily: font.body, fontSize: 13, color: color.inkFaint, marginTop: space.xs, lineHeight: 19 },
   input: {
     fontFamily: font.body, fontSize: 16, color: color.ink,
     backgroundColor: color.paperRaised, borderRadius: radius.sm,

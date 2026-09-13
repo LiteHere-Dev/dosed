@@ -1,17 +1,21 @@
 import { useEffect, useState } from "react";
-import { View, ActivityIndicator, AppState, Pressable, Text } from "react-native";
+import { View, ActivityIndicator, AppState, Pressable } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { Feather } from "@expo/vector-icons";
 import { getDb } from "@/db/schema";
 import { isSignedIn } from "@/lib/api";
 import { runSync } from "@/lib/sync";
 import { applyPendingUpdate } from "@/lib/updates";
+import { hasOnboarded } from "@/lib/onboarding";
+import { AppMenu } from "@/components/AppMenu";
 import { color, font } from "@/theme/tokens";
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
   const [authed, setAuthed] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
   const segments = useSegments();
 
@@ -29,19 +33,28 @@ export default function RootLayout() {
   // Redirect based on sign-in state, re-checked on every navigation (not just
   // once at launch) so that logging in or registering actually escapes this
   // effect's own redirect instead of bouncing back to /auth/login. "legal"
-  // screens are public and must stay reachable whether signed in or not —
-  // people need to be able to read the Privacy Policy / Terms from the
-  // login screen, before ever creating an account.
+  // and "onboarding" screens are public and must stay reachable whether
+  // signed in or not: people need to be able to read the Privacy Policy /
+  // Terms from the login screen, before ever creating an account.
   useEffect(() => {
     if (!ready) return;
     (async () => {
       const signedIn = await isSignedIn();
       setAuthed(signedIn);
-      const inAuthGroup = segments[0] === "auth";
-      const inLegalGroup = segments[0] === "legal";
-      if (inLegalGroup) return; // always reachable, signed in or not
-      if (!signedIn && !inAuthGroup) router.replace("/auth/login");
-      if (signedIn && inAuthGroup) router.replace("/");
+      const seg0 = segments[0];
+      if (seg0 === "legal") return; // always reachable, signed in or not
+
+      if (!signedIn) {
+        const onboarded = await hasOnboarded();
+        if (!onboarded && seg0 !== "onboarding") {
+          router.replace("/onboarding");
+          return;
+        }
+        if (seg0 !== "auth" && seg0 !== "onboarding") router.replace("/auth/login");
+        return;
+      }
+
+      if (seg0 === "auth" || seg0 === "onboarding") router.replace("/");
     })();
   }, [ready, segments]);
 
@@ -66,6 +79,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar style="dark" />
+      <AppMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: color.paper },
@@ -73,6 +87,12 @@ export default function RootLayout() {
           headerTintColor: color.ink,
           headerShadowVisible: false,
           contentStyle: { backgroundColor: color.paper },
+          headerLeft: () =>
+            authed ? (
+              <Pressable onPress={() => setMenuOpen(true)} hitSlop={12} style={{ marginRight: 12 }}>
+                <Feather name="menu" size={22} color={color.ink} />
+              </Pressable>
+            ) : null,
         }}
       >
         <Stack.Screen
@@ -81,7 +101,7 @@ export default function RootLayout() {
             title: "Today",
             headerRight: () => (
               <Pressable onPress={() => router.push("/settings")} hitSlop={8}>
-                <Text style={{ fontFamily: font.body, color: color.clayDeep, fontSize: 14 }}>Settings</Text>
+                <Feather name="settings" size={20} color={color.clayDeep} />
               </Pressable>
             ),
           }}
@@ -95,6 +115,7 @@ export default function RootLayout() {
         <Stack.Screen name="settings" options={{ title: "Settings" }} />
         <Stack.Screen name="legal/privacy" options={{ title: "Privacy Policy" }} />
         <Stack.Screen name="legal/terms" options={{ title: "Terms & Conditions" }} />
+        <Stack.Screen name="onboarding/index" options={{ headerShown: false }} />
         <Stack.Screen name="auth/login" options={{ headerShown: false }} />
         <Stack.Screen name="auth/register" options={{ title: "Create account" }} />
         <Stack.Screen name="auth/forgot-password" options={{ title: "Reset password" }} />
