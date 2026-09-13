@@ -22,8 +22,9 @@
     "android": {
       "package": "com.dosed.app",
       "permissions": [
-        "SCHEDULE_EXACT_ALARM",
-        "POST_NOTIFICATIONS"
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "runtimeVersion": {
@@ -31,6 +32,12 @@
     },
     "updates": {
       "url": "https://u.expo.dev/REPLACE_AFTER_EAS_INIT"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "bd00497a-3352-46f5-9f48-9dc188d85af9"
+      }
     }
   }
 }

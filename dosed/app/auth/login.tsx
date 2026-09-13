@@ -53,6 +53,12 @@ export default function Login() {
       <Pressable onPress={() => router.push("/auth/register")} style={{ marginTop: space.sm }}>
         <Text style={styles.link}>New here? Create an account</Text>
       </Pressable>
+
+      <Text style={styles.legalNotice}>
+        <Text style={styles.legalLink} onPress={() => router.push("/legal/terms")}>Terms & Conditions</Text>
+        {"  •  "}
+        <Text style={styles.legalLink} onPress={() => router.push("/legal/privacy")}>Privacy Policy</Text>
+      </Text>
     </View>
   );
 }
@@ -69,4 +75,6 @@ const styles = StyleSheet.create({
   },
   error: { fontFamily: font.body, fontSize: 13, color: color.danger, marginBottom: space.sm },
   link: { fontFamily: font.body, fontSize: 14, color: color.clayDeep, textAlign: "center" },
+  legalNotice: { textAlign: "center", marginTop: space.xxl },
+  legalLink: { fontFamily: font.body, fontSize: 12, color: color.inkFaint },
 });
