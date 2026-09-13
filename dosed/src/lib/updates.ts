@@ -1,20 +1,29 @@
 import * as Updates from "expo-updates";
 
 /**
- * Checks for and applies a pending OTA update, then reloads once if one was
- * found. Call this once at launch, fire-and-forget — it's a no-op in dev
- * (Updates.isEnabled is false under expo start) and swallows errors so a
- * flaky network check never blocks app startup.
+ * True if there's an OTA update on the server this session hasn't loaded
+ * yet. No-op (false) in dev, where Updates.isEnabled is false under
+ * `expo start`. Swallows network errors as "nothing to offer" rather than
+ * surfacing a check failure to the person — an unreachable update server
+ * shouldn't look like an app problem.
  */
-export async function applyPendingUpdate(): Promise<void> {
-  if (!Updates.isEnabled) return; // dev client / expo start
+export async function checkForUpdate(): Promise<boolean> {
+  if (!Updates.isEnabled) return false;
   try {
     const check = await Updates.checkForUpdateAsync();
-    if (!check.isAvailable) return;
-    await Updates.fetchUpdateAsync();
-    await Updates.reloadAsync(); // applies immediately — acceptable at cold launch, before the user's done anything with the current session
+    return check.isAvailable;
   } catch {
-    // Offline, or EAS Update unreachable — the app already launched fine
-    // from the embedded/previous bundle, so this is silent by design.
+    return false;
   }
+}
+
+/**
+ * Downloads the pending update and reloads immediately. Only called from
+ * the update banner once the person taps "Update" — reloading without
+ * asking (the old behavior, silently at cold launch) can drop whatever
+ * they were mid-way through on the previous screen.
+ */
+export async function applyUpdate(): Promise<void> {
+  await Updates.fetchUpdateAsync();
+  await Updates.reloadAsync();
 }

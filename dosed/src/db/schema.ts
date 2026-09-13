@@ -98,8 +98,21 @@ async function migrate(d: SQLite.SQLiteDatabase) {
   await d.runAsync("INSERT INTO schema_meta (version) VALUES (?)", version);
 }
 
-// crypto.randomUUID is available globally on Expo SDK 49+ (JSC/Hermes polyfill) — no dependency needed.
-const uuid = () => crypto.randomUUID();
+// crypto.randomUUID is available globally on most Expo SDK 49+ runtimes,
+// but not guaranteed on every Hermes/Expo Go combination — it throws
+// "Property 'crypto' doesn't exist" there instead of just being undefined,
+// so a simple `?. ` guard isn't enough. Fall back to a Math.random-based
+// v4-shaped UUID: not cryptographically secure, but these ids are only
+// ever local primary keys, never used for anything security-sensitive.
+const uuid = (): string => {
+  const g = globalThis as { crypto?: { randomUUID?: () => string } };
+  if (g.crypto?.randomUUID) return g.crypto.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
 const now = () => new Date().toISOString();
 
 // --- Pets ---

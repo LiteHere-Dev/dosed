@@ -7,9 +7,9 @@ import { Feather } from "@expo/vector-icons";
 import { getDb } from "@/db/schema";
 import { isSignedIn } from "@/lib/api";
 import { runSync } from "@/lib/sync";
-import { applyPendingUpdate } from "@/lib/updates";
 import { hasOnboarded } from "@/lib/onboarding";
 import { AppMenu } from "@/components/AppMenu";
+import { UpdateBanner } from "@/components/UpdateBanner";
 import { color, font } from "@/theme/tokens";
 
 export default function RootLayout() {
@@ -26,7 +26,6 @@ export default function RootLayout() {
       setAuthed(signedIn);
       setReady(true);
       if (signedIn) runSync().catch(() => {}); // best-effort: offline launch still works from local data
-      applyPendingUpdate(); // fire-and-forget: reloads once if a newer OTA bundle is available
     })();
   }, []);
 
@@ -79,6 +78,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar style="dark" />
+      <UpdateBanner />
       <AppMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />
       <Stack
         screenOptions={{
