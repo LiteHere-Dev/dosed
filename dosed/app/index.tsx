@@ -87,22 +87,21 @@ export default function Today() {
     runSync().catch(() => {});
   };
 
-  // A card summarizing 0 pets and 0 doses is noise on a brand-new account —
-  // it only earns its place once there's something to actually summarize.
-  const showGlance = loaded && summary.totalPets > 0;
+  // Always show the dashboard shell, even for a brand-new account with
+  // nothing in it yet — a fresh install with zeroed-out cards reads as
+  // "here's what you'll be tracking" rather than a blank screen, and
+  // costs nothing to render (every stat below already defaults to 0/empty).
+  const showGlance = loaded;
 
   if (loaded && sections.length === 0) {
     const hasPets = summary.totalPets > 0;
     return (
       <View style={{ flex: 1, backgroundColor: color.paper }}>
         <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl }}>
-          {hasPets && (
-            <>
-              <Text style={styles.dateLabel}>{todayLabel()}</Text>
-              <WeekCard dashboard={dashboard} />
-              {pets.length > 1 && <PetStrip pets={pets} onSelect={(id) => router.push(`/pets/${id}`)} />}
-            </>
-          )}
+          <Text style={styles.dateLabel}>{todayLabel()}</Text>
+          <GlanceCard summary={summary} streak={dashboard.streak} />
+          <WeekCard dashboard={dashboard} />
+          {pets.length > 1 && <PetStrip pets={pets} onSelect={(id) => router.push(`/pets/${id}`)} />}
           <EmptyState
             title={hasPets ? "Nothing due today" : "No pets yet"}
             body={
@@ -168,8 +167,6 @@ export default function Today() {
  * miss); today doesn't break it either while it's still in progress.
  */
 async function computeDashboard(petList: Pet[], meds: Medication[]): Promise<Dashboard> {
-  if (petList.length === 0) return EMPTY_DASHBOARD;
-
   const days: { start: Date; end: Date; label: string }[] = [];
   for (let i = 6; i >= 0; i--) {
     const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - i);
@@ -246,7 +243,7 @@ function GlanceCard({ summary, streak }: { summary: Summary; streak: number }) {
         <View style={styles.pillStack}>
           <View style={[styles.remainingPill, allDone && styles.remainingPillDone]}>
             <Text style={[styles.remainingPillText, allDone && styles.remainingPillTextDone]}>
-              {allDone ? "All done" : `${remaining} left`}
+              {summary.dosesToday === 0 ? "Nothing scheduled" : allDone ? "All done" : `${remaining} left`}
             </Text>
           </View>
           {streak > 0 && (
