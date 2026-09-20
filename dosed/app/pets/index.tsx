@@ -5,6 +5,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { listPets } from "@/db/schema";
 import { Button } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
+import { PlayfulQuote } from "@/components/PlayfulQuote";
 import { PixelCat, PetAvatar } from "@/components/PixelArt";
 import { color, font, space, radius } from "@/theme/tokens";
 import type { Pet } from "@/db/types";
@@ -18,6 +19,7 @@ export default function PetsList() {
   return (
     <View style={{ flex: 1, backgroundColor: color.paper, padding: space.lg }}>
       <FlatList
+        style={{ flex: 1 }}
         data={pets}
         keyExtractor={(p) => p.id}
         ListEmptyComponent={<EmptyState title="No pets yet" body="Add your first pet to start a medication schedule." art={<PixelCat pixelSize={8} />} />}
@@ -33,6 +35,7 @@ export default function PetsList() {
           </Animated.View>
         )}
       />
+      <PlayfulQuote />
       <Button label="Add a pet" onPress={() => router.push("/pets/new")} />
     </View>
   );
