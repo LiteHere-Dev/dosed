@@ -2,10 +2,10 @@ import { ReactNode } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { color, font, space } from "@/theme/tokens";
 
-export function EmptyState({ title, body, art }: { title: string; body: string; art?: ReactNode }) {
+export function EmptyState({ title, body, art, compact = false }: { title: string; body: string; art?: ReactNode; compact?: boolean }) {
   return (
-    <View style={styles.wrap}>
-      {art && <View style={styles.art}>{art}</View>}
+    <View style={[styles.wrap, compact && { paddingVertical: space.sm }]}>
+      {art && <View style={[styles.art, compact && { marginBottom: space.md }]}>{art}</View>}
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.body}>{body}</Text>
     </View>

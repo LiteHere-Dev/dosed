@@ -99,23 +99,34 @@ export default function Today() {
     const hasPets = summary.totalPets > 0;
     return (
       <View style={{ flex: 1, backgroundColor: color.paper }}>
-        <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl }}>
-          <Greeting />
-          <Animated.View entering={FadeInDown.duration(450)}><GlanceCard summary={summary} streak={dashboard.streak} /></Animated.View>
-          <Animated.View entering={FadeInDown.delay(120).duration(450)}><WeekCard dashboard={dashboard} /></Animated.View>
+        {/* Compact layout: with nothing due, everything is sized to fit one
+            screen with no scrolling (the empty state takes whatever space is
+            left and centers in it). On a very short phone it still scrolls
+            rather than clipping. */}
+        <ScrollView
+          bounces={false}
+          overScrollMode="never"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ flexGrow: 1, paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.lg }}
+        >
+          <Greeting compact />
+          <Animated.View entering={FadeInDown.duration(450)}><GlanceCard summary={summary} streak={dashboard.streak} compact /></Animated.View>
+          <Animated.View entering={FadeInDown.delay(120).duration(450)}><WeekCard dashboard={dashboard} compact /></Animated.View>
           {pets.length > 1 && (
             <Animated.View entering={FadeInDown.delay(240).duration(450)}>
-              <PetStrip pets={pets} onSelect={(id) => router.push(`/pets/${id}`)} />
+              <PetStrip pets={pets} compact onSelect={(id) => router.push(`/pets/${id}`)} />
             </Animated.View>
           )}
+          <View style={{ flex: 1, justifyContent: "center" }}>
           <EmptyState
+            compact
             title={hasPets ? "Nothing due today" : "No pets yet"}
             body={
               hasPets
                 ? "Every active medication is scheduled or already given — check back when the next dose is due."
                 : "Add a pet and a medication to start tracking doses."
             }
-            art={<BreathingArt />}
+            art={<BreathingArt compact />}
           />
           <Animated.View entering={FadeInDown.delay(360).duration(450)}>
             <Button
@@ -124,6 +135,7 @@ export default function Today() {
               style={styles.inlineCta}
             />
           </Animated.View>
+          </View>
         </ScrollView>
       </View>
     );
@@ -234,12 +246,12 @@ function useCountUp(target: number, duration = 750) {
   return value;
 }
 
-function Greeting() {
+function Greeting({ compact = false }: { compact?: boolean }) {
   const h = new Date().getHours();
   const hello = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
   return (
-    <Animated.View entering={FadeInDown.duration(400)} style={{ marginBottom: space.md }}>
-      <Text style={styles.greeting}>{hello}</Text>
+    <Animated.View entering={FadeInDown.duration(400)} style={{ marginBottom: compact ? space.sm : space.md }}>
+      <Text style={[styles.greeting, compact && { fontSize: 22 }]}>{hello}</Text>
       <Text style={styles.dateLabel}>{todayLabel()}</Text>
     </Animated.View>
   );
@@ -252,7 +264,7 @@ function Greeting() {
  * animation on this screen — rather than every re-render, so marking a
  * dose doesn't replay it.
  */
-function GlanceCard({ summary, streak }: { summary: Summary; streak: number }) {
+function GlanceCard({ summary, streak, compact = false }: { summary: Summary; streak: number; compact?: boolean }) {
   const remaining = Math.max(summary.dosesToday - summary.dosesTaken, 0);
   const pct = summary.dosesToday > 0 ? (summary.dosesTaken / summary.dosesToday) * 100 : 0;
   const allDone = summary.dosesToday > 0 && remaining === 0;
@@ -274,16 +286,18 @@ function GlanceCard({ summary, streak }: { summary: Summary; streak: number }) {
   const cardStyle = useAnimatedStyle(() => ({ opacity: cardOpacity.value, transform: [{ translateY: cardRise.value }] }));
 
   return (
-    <Animated.View style={[styles.glanceCard, cardStyle]}>
+    <Animated.View style={[styles.glanceCard, compact && styles.glanceCardCompact, cardStyle]}>
       <View pointerEvents="none" style={styles.glanceRingBig} />
       <View pointerEvents="none" style={styles.glanceRingSmall} />
       <View style={styles.glanceTop}>
         <View>
-          <Text style={styles.glanceCount}>
+          <Text style={[styles.glanceCount, compact && { fontSize: 36 }]}>
             {shownTaken}
             <Text style={styles.glanceCountTotal}> / {shownTotal}</Text>
           </Text>
-          <Text style={styles.glanceLabel}>doses given today</Text>
+          <Text style={styles.glanceLabel}>
+            doses given today{compact ? ` · ${summary.totalPets} ${summary.totalPets === 1 ? "pet" : "pets"}` : ""}
+          </Text>
         </View>
         <View style={styles.pillStack}>
           <View style={[styles.remainingPill, allDone && styles.remainingPillDone]}>
@@ -298,12 +312,14 @@ function GlanceCard({ summary, streak }: { summary: Summary; streak: number }) {
           )}
         </View>
       </View>
-      <View style={styles.track}>
+      <View style={[styles.track, compact && { marginTop: space.md }]}>
         <Animated.View style={[styles.fill, barStyle, allDone && styles.fillDone]} />
       </View>
-      <Text style={styles.glanceFooter}>
+      {!compact && (
+        <Text style={styles.glanceFooter}>
         across {summary.totalPets} {summary.totalPets === 1 ? "pet" : "pets"}
       </Text>
+      )}
     </Animated.View>
   );
 }
@@ -315,24 +331,24 @@ function GlanceCard({ summary, streak }: { summary: Summary; streak: number }) {
  * households can see who's falling behind, not just a household-wide
  * average.
  */
-function WeekCard({ dashboard }: { dashboard: Dashboard }) {
+function WeekCard({ dashboard, compact = false }: { dashboard: Dashboard; compact?: boolean }) {
   if (dashboard.week.length === 0) return null;
   const totalScheduled = dashboard.week.reduce((sum, d) => sum + d.scheduled, 0);
   const totalTaken = dashboard.week.reduce((sum, d) => sum + d.taken, 0);
   const weekPct = totalScheduled > 0 ? Math.round((totalTaken / totalScheduled) * 100) : null;
 
   return (
-    <View style={styles.weekCard}>
-      <View style={styles.weekHeaderRow}>
+    <View style={[styles.weekCard, compact && styles.weekCardCompact]}>
+      <View style={[styles.weekHeaderRow, compact && { marginBottom: space.sm }]}>
         <Text style={styles.weekTitle}>This week</Text>
         {weekPct !== null && <Text style={styles.weekPct}>{weekPct}% on schedule</Text>}
       </View>
-      <View style={styles.barsRow}>
+      <View style={[styles.barsRow, compact && { height: 62 }]}>
         {dashboard.week.map((d, i) => (
-          <DayBar key={i} day={d} />
+          <DayBar key={i} day={d} compact={compact} />
         ))}
       </View>
-      {dashboard.perPet.length > 1 && (
+      {!compact && dashboard.perPet.length > 1 && (
         <View style={styles.perPetList}>
           {dashboard.perPet.map(({ pet, scheduled, taken }) => {
             const pct = scheduled > 0 ? Math.round((taken / scheduled) * 100) : 0;
@@ -353,7 +369,7 @@ function WeekCard({ dashboard }: { dashboard: Dashboard }) {
   );
 }
 
-function DayBar({ day }: { day: DayStat }) {
+function DayBar({ day, compact = false }: { day: DayStat; compact?: boolean }) {
   const pct = day.scheduled > 0 ? (day.taken / day.scheduled) * 100 : 0;
   const height = useSharedValue(0);
   useEffect(() => {
@@ -364,7 +380,7 @@ function DayBar({ day }: { day: DayStat }) {
 
   return (
     <View style={styles.dayColumn}>
-      <View style={styles.dayTrack}>
+      <View style={[styles.dayTrack, compact && { height: 40 }]}>
         {day.scheduled > 0 ? (
           <Animated.View style={[styles.dayFill, barStyle, pct === 100 && styles.fillDone]} />
         ) : (
@@ -377,18 +393,18 @@ function DayBar({ day }: { day: DayStat }) {
 }
 
 /** Horizontal quick-nav to jump straight to a pet without scrolling sections. */
-function PetStrip({ pets, onSelect }: { pets: Pet[]; onSelect: (id: string) => void }) {
+function PetStrip({ pets, onSelect, compact = false }: { pets: Pet[]; onSelect: (id: string) => void; compact?: boolean }) {
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.stripContent}
-      style={styles.strip}
+      style={[styles.strip, compact && { marginBottom: space.sm }]}
     >
       {pets.map((pet, i) => (
         <Animated.View key={pet.id} entering={ZoomIn.delay(320 + i * 70).duration(320)}>
           <Pressable style={styles.stripItem} onPress={() => onSelect(pet.id)}>
-            <PetAvatar name={pet.name} species={pet.species} photoUri={pet.photoUri} size={48} />
+            <PetAvatar name={pet.name} species={pet.species} photoUri={pet.photoUri} size={compact ? 40 : 48} />
             <Text style={styles.stripLabel} numberOfLines={1}>{pet.name}</Text>
           </Pressable>
         </Animated.View>
@@ -400,7 +416,7 @@ function PetStrip({ pets, onSelect }: { pets: Pet[]; onSelect: (id: string) => v
 /** Idle breathing scale on the empty-state mascot — the single non-user-
  * triggered motion on this screen, and skipped entirely if the system
  * prefers reduced motion. */
-function BreathingArt() {
+function BreathingArt({ compact = false }: { compact?: boolean }) {
   const scale = useSharedValue(1);
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then((reduced) => {
@@ -419,7 +435,7 @@ function BreathingArt() {
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   return (
     <Animated.View style={style}>
-      <PixelDog pixelSize={8} />
+      <PixelDog pixelSize={compact ? 5 : 8} />
     </Animated.View>
   );
 }
@@ -437,6 +453,8 @@ const styles = StyleSheet.create({
   },
   glanceRingBig: { position: "absolute", right: -70, top: -80, width: 220, height: 220, borderRadius: 110, borderWidth: 1, borderColor: "rgba(247,243,236,0.09)" },
   glanceRingSmall: { position: "absolute", right: -30, top: -40, width: 140, height: 140, borderRadius: 70, borderWidth: 1, borderColor: "rgba(247,243,236,0.09)" },
+  glanceCardCompact: { padding: space.md + 4, marginBottom: space.sm },
+  weekCardCompact: { padding: space.md, marginBottom: space.sm },
   glanceTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" },
   glanceCount: { fontFamily: font.heading, fontSize: 44, color: color.paper },
   glanceCountTotal: { fontSize: 22, color: "rgba(247,243,236,0.5)" },
