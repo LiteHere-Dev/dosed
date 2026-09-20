@@ -143,6 +143,19 @@ export async function setPetPhoto(id: string, photoUri: string): Promise<void> {
   await d.runAsync("UPDATE pets SET photoUri = ?, updatedAt = ? WHERE id = ?", photoUri, now(), id);
 }
 
+/** Edits a pet's details. Stamps updatedAt so the change syncs (last-write-wins) to the person's other devices. */
+export async function updatePet(
+  id: string,
+  patch: Partial<Pick<Pet, "name" | "species" | "breed" | "weightKg" | "photoUri" | "notes">>
+): Promise<void> {
+  const d = await getDb();
+  const cols = Object.keys(patch) as (keyof typeof patch)[];
+  if (cols.length === 0) return;
+  const sets = cols.map((c) => `${c} = ?`).join(", ");
+  const values = cols.map((c) => patch[c] as string | number | null);
+  await d.runAsync(`UPDATE pets SET ${sets}, updatedAt = ? WHERE id = ?`, ...values, now(), id);
+}
+
 /** Applied by the sync engine when pulling a pet from the server — LWW, never regresses a newer local edit. */
 export async function upsertPetFromServer(pet: Pet): Promise<void> {  const d = await getDb();
   await d.runAsync(

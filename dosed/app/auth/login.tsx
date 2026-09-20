@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { View, Text, TextInput, StyleSheet, Pressable } from "react-native";
+import { Text, StyleSheet, Pressable, View } from "react-native";
 import { useRouter } from "expo-router";
 import { login, ApiClientError } from "@/lib/api";
 import { runSync } from "@/lib/sync";
-import { Button } from "@/components/Button";
 import { Checkbox } from "@/components/Checkbox";
-import { color, font, space, radius } from "@/theme/tokens";
+import { AuthShell, AuthField, MorphButton, Reveal, sleep } from "@/components/AuthShell";
+import { color, font, space } from "@/theme/tokens";
 
 export default function Login() {
   const router = useRouter();
@@ -14,6 +14,7 @@ export default function Login() {
   const [stayedSignedIn, setStayedSignedIn] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [curtain, setCurtain] = useState(false);
 
   const submit = async () => {
     setError(null);
@@ -21,69 +22,65 @@ export default function Login() {
     try {
       await login(identifier.trim(), password, stayedSignedIn);
       await runSync();
+      // Fade to dark first so the jump into the app feels like a hand-off,
+      // not a hard cut.
+      setCurtain(true);
+      await sleep(360);
       router.replace("/");
     } catch (err) {
+      setBusy(false);
       if (err instanceof ApiClientError && err.code === "account_locked") {
         setError("Too many failed attempts. Try again in a few minutes.");
       } else {
         setError("Wrong email/username or password.");
       }
-    } finally {
-      setBusy(false);
     }
   };
 
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.title}>Dosed</Text>
-      <Text style={styles.subtitle}>Sign in to sync your pets across devices.</Text>
-
-      <TextInput
-        style={styles.input} placeholder="Email or username" placeholderTextColor={color.inkFaint}
-        autoCapitalize="none" value={identifier} onChangeText={setIdentifier}
-      />
-      <TextInput
-        style={styles.input} placeholder="Password" placeholderTextColor={color.inkFaint}
-        secureTextEntry value={password} onChangeText={setPassword}
-      />
-
-      <Checkbox
-        label="Stay signed in on this device"
-        checked={stayedSignedIn}
-        onChange={setStayedSignedIn}
-      />
-
+    <AuthShell tagline="Welcome back. Sign in to continue." curtain={curtain}>
+      <Reveal index={0}>
+        <Text style={styles.title}>Sign in</Text>
+      </Reveal>
+      <Reveal index={1}>
+        <AuthField label="Email or username" placeholder="you@example.com" autoCapitalize="none" autoCorrect={false} value={identifier} onChangeText={setIdentifier} />
+      </Reveal>
+      <Reveal index={2}>
+        <AuthField label="Password" placeholder="Your password" secure value={password} onChangeText={setPassword} />
+      </Reveal>
+      <Reveal index={3}>
+        <View style={styles.row}>
+          <Checkbox label="Stay signed in" checked={stayedSignedIn} onChange={setStayedSignedIn} />
+          <Pressable onPress={() => router.push("/auth/forgot-password")} hitSlop={8}>
+            <Text style={styles.link}>Forgot password?</Text>
+          </Pressable>
+        </View>
+      </Reveal>
       {error && <Text style={styles.error}>{error}</Text>}
-
-      <Button label={busy ? "Signing in…" : "Sign in"} onPress={submit} style={{ marginTop: space.md }} />
-      <Pressable onPress={() => router.push("/auth/forgot-password")} style={{ marginTop: space.lg }}>
-        <Text style={styles.link}>Forgot your password?</Text>
-      </Pressable>
-      <Pressable onPress={() => router.push("/auth/register")} style={{ marginTop: space.sm }}>
-        <Text style={styles.link}>New here? Create an account</Text>
-      </Pressable>
-
-      <Text style={styles.legalNotice}>
-        <Text style={styles.legalLink} onPress={() => router.push("/legal/terms")}>Terms & Conditions</Text>
-        {"  •  "}
-        <Text style={styles.legalLink} onPress={() => router.push("/legal/privacy")}>Privacy Policy</Text>
-      </Text>
-    </View>
+      <Reveal index={4}>
+        <MorphButton label="Sign in" busy={busy} onPress={submit} style={{ marginTop: space.md }} />
+      </Reveal>
+      <Reveal index={5}>
+        <Pressable onPress={() => router.push("/auth/register")} style={{ marginTop: space.lg }}>
+          <Text style={styles.center}>New here? <Text style={styles.linkStrong}>Create an account</Text></Text>
+        </Pressable>
+        <Text style={styles.legalNotice}>
+          <Text style={styles.legalLink} onPress={() => router.push("/legal/terms")}>Terms & Conditions</Text>
+          {"  •  "}
+          <Text style={styles.legalLink} onPress={() => router.push("/legal/privacy")}>Privacy Policy</Text>
+        </Text>
+      </Reveal>
+    </AuthShell>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: color.paper, padding: space.xl, justifyContent: "center" },
-  title: { fontFamily: font.heading, fontSize: 36, color: color.ink, textAlign: "center" },
-  subtitle: { fontFamily: font.body, fontSize: 14, color: color.inkFaint, textAlign: "center", marginTop: space.xs, marginBottom: space.xl },
-  input: {
-    fontFamily: font.body, fontSize: 16, color: color.ink,
-    backgroundColor: color.paperRaised, borderRadius: radius.sm,
-    borderWidth: 1, borderColor: color.hairline,
-    paddingHorizontal: space.md, paddingVertical: space.sm, marginBottom: space.md,
-  },
-  error: { fontFamily: font.body, fontSize: 13, color: color.danger, marginTop: space.sm, marginBottom: space.sm },
-  link: { fontFamily: font.body, fontSize: 14, color: color.clayDeep, textAlign: "center" },
-  legalNotice: { textAlign: "center", marginTop: space.xxl },
+  title: { fontFamily: font.heading, fontSize: 28, color: color.ink, marginBottom: space.lg },
+  row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  link: { fontFamily: font.body, fontSize: 13, color: color.clayDeep },
+  linkStrong: { fontFamily: font.body, fontSize: 14, color: color.clayDeep, fontWeight: "700" },
+  center: { fontFamily: font.body, fontSize: 14, color: color.inkFaint, textAlign: "center" },
+  error: { fontFamily: font.body, fontSize: 13, color: color.danger, marginTop: space.sm },
+  legalNotice: { textAlign: "center", marginTop: space.xl },
   legalLink: { fontFamily: font.body, fontSize: 12, color: color.inkFaint },
 });

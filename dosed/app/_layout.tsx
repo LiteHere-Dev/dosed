@@ -108,6 +108,7 @@ export default function RootLayout() {
         />
         <Stack.Screen name="pets/index" options={{ title: "Pets" }} />
         <Stack.Screen name="pets/new" options={{ title: "Add a pet", presentation: "modal" }} />
+        <Stack.Screen name="pets/edit" options={{ title: "Edit pet", presentation: "modal" }} />
         <Stack.Screen name="pets/[id]" options={{ title: "" }} />
         <Stack.Screen name="meds/new" options={{ title: "Add medication", presentation: "modal" }} />
         <Stack.Screen name="meds/[id]" options={{ title: "Medication" }} />
@@ -117,7 +118,7 @@ export default function RootLayout() {
         <Stack.Screen name="legal/terms" options={{ title: "Terms & Conditions" }} />
         <Stack.Screen name="onboarding/index" options={{ headerShown: false }} />
         <Stack.Screen name="auth/login" options={{ headerShown: false }} />
-        <Stack.Screen name="auth/register" options={{ title: "Create account" }} />
+        <Stack.Screen name="auth/register" options={{ headerShown: false }} />
         <Stack.Screen name="auth/forgot-password" options={{ title: "Reset password" }} />
         <Stack.Screen name="auth/reset-password" options={{ title: "Reset password" }} />
         <Stack.Screen name="auth/verify-email" options={{ title: "Verify email", headerShown: false }} />

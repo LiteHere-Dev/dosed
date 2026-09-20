@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { View, Text, TextInput, StyleSheet, Pressable } from "react-native";
+import { Text, StyleSheet, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import { register, ApiClientError } from "@/lib/api";
 import { runSync } from "@/lib/sync";
-import { Button } from "@/components/Button";
 import { Checkbox } from "@/components/Checkbox";
-import { color, font, space, radius } from "@/theme/tokens";
+import { AuthShell, AuthField, MorphButton, Reveal, sleep } from "@/components/AuthShell";
+import { color, font, space } from "@/theme/tokens";
 
 const ERROR_COPY: Record<string, string> = {
   account_exists: "That email, username, or phone number is already registered.",
@@ -21,6 +21,7 @@ export default function Register() {
   const [stayedSignedIn, setStayedSignedIn] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [curtain, setCurtain] = useState(false);
 
   const submit = async () => {
     setError(null);
@@ -29,60 +30,58 @@ export default function Register() {
     try {
       await register(email.trim().toLowerCase(), username.trim(), phone.trim() || null, password, stayedSignedIn);
       await runSync();
+      setCurtain(true);
+      await sleep(360);
       router.replace("/");
     } catch (err) {
+      setBusy(false);
       const code = err instanceof ApiClientError ? err.code : "";
       setError(ERROR_COPY[code] ?? "Couldn't create your account.");
-    } finally {
-      setBusy(false);
     }
   };
 
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.title}>Create your account</Text>
-      <Text style={styles.subtitle}>This is what lets your other devices sync.</Text>
-
-      <TextInput style={styles.input} placeholder="Email" placeholderTextColor={color.inkFaint} autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
-      <TextInput style={styles.input} placeholder="Username" placeholderTextColor={color.inkFaint} autoCapitalize="none" value={username} onChangeText={setUsername} />
-      <TextInput style={styles.input} placeholder="Phone (optional, e.g. +26876123456)" placeholderTextColor={color.inkFaint} keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
-      <TextInput style={styles.input} placeholder="Password (min 8 characters)" placeholderTextColor={color.inkFaint} secureTextEntry value={password} onChangeText={setPassword} />
-
-      <Checkbox
-        label="Stay signed in on this device"
-        checked={stayedSignedIn}
-        onChange={setStayedSignedIn}
-      />
-
+    <AuthShell tagline="Create an account so your pets sync everywhere." curtain={curtain}>
+      <Reveal index={0}>
+        <Text style={styles.title}>Create account</Text>
+      </Reveal>
+      <Reveal index={1}>
+        <AuthField label="Email" placeholder="you@example.com" autoCapitalize="none" autoCorrect={false} keyboardType="email-address" value={email} onChangeText={setEmail} />
+      </Reveal>
+      <Reveal index={2}>
+        <AuthField label="Username" placeholder="Pick a username" autoCapitalize="none" autoCorrect={false} value={username} onChangeText={setUsername} />
+      </Reveal>
+      <Reveal index={3}>
+        <AuthField label="Phone (optional)" placeholder="+26876123456" keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
+      </Reveal>
+      <Reveal index={4}>
+        <AuthField label="Password" placeholder="At least 8 characters" secure value={password} onChangeText={setPassword} />
+      </Reveal>
+      <Reveal index={5}>
+        <Checkbox label="Stay signed in on this device" checked={stayedSignedIn} onChange={setStayedSignedIn} />
+      </Reveal>
       {error && <Text style={styles.error}>{error}</Text>}
-
-      <Text style={styles.legalNotice}>
-        By creating an account you agree to our{" "}
-        <Text style={styles.legalLink} onPress={() => router.push("/legal/terms")}>Terms & Conditions</Text>
-        {" "}and{" "}
-        <Text style={styles.legalLink} onPress={() => router.push("/legal/privacy")}>Privacy Policy</Text>.
-      </Text>
-
-      <Button label={busy ? "Creating account…" : "Create account"} onPress={submit} style={{ marginTop: space.md }} />
-      <Pressable onPress={() => router.replace("/auth/login")} style={{ marginTop: space.lg }}>
-        <Text style={styles.link}>Already have an account? Sign in</Text>
-      </Pressable>
-    </View>
+      <Reveal index={6}>
+        <Text style={styles.legalNotice}>
+          By creating an account you agree to our{" "}
+          <Text style={styles.legalLink} onPress={() => router.push("/legal/terms")}>Terms & Conditions</Text>
+          {" "}and{" "}
+          <Text style={styles.legalLink} onPress={() => router.push("/legal/privacy")}>Privacy Policy</Text>.
+        </Text>
+        <MorphButton label="Create account" busy={busy} onPress={submit} style={{ marginTop: space.md }} />
+        <Pressable onPress={() => router.replace("/auth/login")} style={{ marginTop: space.lg }}>
+          <Text style={styles.center}>Already have an account? <Text style={styles.linkStrong}>Sign in</Text></Text>
+        </Pressable>
+      </Reveal>
+    </AuthShell>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: color.paper, padding: space.xl, justifyContent: "center" },
-  title: { fontFamily: font.heading, fontSize: 28, color: color.ink, textAlign: "center" },
-  subtitle: { fontFamily: font.body, fontSize: 14, color: color.inkFaint, textAlign: "center", marginTop: space.xs, marginBottom: space.xl },
-  input: {
-    fontFamily: font.body, fontSize: 16, color: color.ink,
-    backgroundColor: color.paperRaised, borderRadius: radius.sm,
-    borderWidth: 1, borderColor: color.hairline,
-    paddingHorizontal: space.md, paddingVertical: space.sm, marginBottom: space.md,
-  },
-  error: { fontFamily: font.body, fontSize: 13, color: color.danger, marginTop: space.sm, marginBottom: space.sm },
-  legalNotice: { fontFamily: font.body, fontSize: 12, color: color.inkFaint, textAlign: "center", lineHeight: 17, marginTop: space.md },
+  title: { fontFamily: font.heading, fontSize: 28, color: color.ink, marginBottom: space.lg },
+  linkStrong: { fontFamily: font.body, fontSize: 14, color: color.clayDeep, fontWeight: "700" },
+  center: { fontFamily: font.body, fontSize: 14, color: color.inkFaint, textAlign: "center" },
+  error: { fontFamily: font.body, fontSize: 13, color: color.danger, marginTop: space.sm },
+  legalNotice: { fontFamily: font.body, fontSize: 12, color: color.inkFaint, textAlign: "center", lineHeight: 17, marginTop: space.sm },
   legalLink: { fontFamily: font.body, fontSize: 12, color: color.clayDeep, fontWeight: "600" },
-  link: { fontFamily: font.body, fontSize: 14, color: color.clayDeep, textAlign: "center" },
 });

@@ -6,6 +6,8 @@ import { resolvePhotoUri, deleteUploadedPhoto } from "@/lib/photos";
 import { cancelForMedication } from "@/lib/notifications";
 import { runSync } from "@/lib/sync";
 import { Button } from "@/components/Button";
+import { PetAvatar } from "@/components/PixelArt";
+import { Feather } from "@expo/vector-icons";
 import { EmptyState } from "@/components/EmptyState";
 import { color, font, space } from "@/theme/tokens";
 import type { Pet, Medication } from "@/db/types";
@@ -30,8 +32,21 @@ export default function PetDetail() {
 
   return (
     <View style={{ flex: 1, backgroundColor: color.paper, padding: space.lg }}>
-      <Stack.Screen options={{ title: pet?.name ?? "" }} />
-      {photoUri && <Image source={{ uri: photoUri }} style={styles.photo} />}
+      <Stack.Screen
+        options={{
+          title: pet?.name ?? "",
+          headerRight: () => (
+            <Pressable onPress={() => router.push({ pathname: "/pets/edit", params: { petId: id } })} hitSlop={10}>
+              <Feather name="edit-2" size={19} color={color.clayDeep} />
+            </Pressable>
+          ),
+        }}
+      />
+      {photoUri ? (
+        <Image source={{ uri: photoUri }} style={styles.photo} />
+      ) : pet ? (
+        <View style={{ marginBottom: space.md }}><PetAvatar name={pet.name} species={pet.species} size={88} /></View>
+      ) : null}
       {pet && (
         <Text style={styles.subtitle}>
           {pet.species}{pet.breed ? ` · ${pet.breed}` : ""}{pet.weightKg ? ` · ${pet.weightKg} kg` : ""}
@@ -50,6 +65,7 @@ export default function PetDetail() {
         )}
       />
       <View style={{ gap: space.sm }}>
+        <Button label="Edit pet" variant="quiet" onPress={() => router.push({ pathname: "/pets/edit", params: { petId: id } })} />
         <Button label="Add medication" onPress={() => router.push({ pathname: "/meds/new", params: { petId: id } })} />
         <Button label="View history / export" variant="quiet" onPress={() => router.push(`/history/${id}`)} />
         <Button

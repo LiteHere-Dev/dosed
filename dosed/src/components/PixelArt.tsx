@@ -1,4 +1,6 @@
-import { View, Text, StyleSheet } from "react-native";
+import { useEffect, useState } from "react";
+import { View, Text, StyleSheet, Image } from "react-native";
+import { resolvePhotoUri } from "@/lib/photos";
 import { color, font } from "@/theme/tokens";
 
 // Deliberately built from a grid of plain Views rather than an image asset
@@ -167,11 +169,23 @@ const SPECIES_TILE: Record<string, { bg: string; render: () => JSX.Element }> = 
   cat: { bg: color.mossFaint, render: () => <PixelCat pixelSize={2} /> },
 };
 
-export function PetAvatar({ name, species, size = 44 }: { name: string; species: string; size?: number }) {
+export function PetAvatar({ name, species, size = 44, photoUri }: { name: string; species: string; size?: number; photoUri?: string | null }) {
   const tile = SPECIES_TILE[species?.toLowerCase?.() ?? ""];
+  // Shows the pet's uploaded photo when there is one, falling back to the
+  // species pixel art (or initial) while it loads or if it can't be loaded.
+  const [resolved, setResolved] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!photoUri) { setResolved(null); return; }
+    resolvePhotoUri(photoUri).then((u) => { if (!cancelled) setResolved(u); }).catch(() => { if (!cancelled) setResolved(null); });
+    return () => { cancelled = true; };
+  }, [photoUri]);
+
   return (
     <View style={[avatarStyles.wrap, { width: size, height: size, borderRadius: size / 2, backgroundColor: tile?.bg ?? color.clay }]}>
-      {tile ? tile.render() : (
+      {resolved ? (
+        <Image source={{ uri: resolved }} style={{ width: size, height: size }} resizeMode="cover" onError={() => setResolved(null)} />
+      ) : tile ? tile.render() : (
         <Text style={[avatarStyles.initial, { fontSize: size * 0.4 }]}>{name.trim().charAt(0).toUpperCase() || "?"}</Text>
       )}
     </View>

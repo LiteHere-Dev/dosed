@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { View, Text, SectionList, ScrollView, StyleSheet, Pressable, AccessibilityInfo } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import Animated, {
+  FadeInDown,
+  ZoomIn,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -98,10 +100,14 @@ export default function Today() {
     return (
       <View style={{ flex: 1, backgroundColor: color.paper }}>
         <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl }}>
-          <Text style={styles.dateLabel}>{todayLabel()}</Text>
-          <GlanceCard summary={summary} streak={dashboard.streak} />
-          <WeekCard dashboard={dashboard} />
-          {pets.length > 1 && <PetStrip pets={pets} onSelect={(id) => router.push(`/pets/${id}`)} />}
+          <Greeting />
+          <Animated.View entering={FadeInDown.duration(450)}><GlanceCard summary={summary} streak={dashboard.streak} /></Animated.View>
+          <Animated.View entering={FadeInDown.delay(120).duration(450)}><WeekCard dashboard={dashboard} /></Animated.View>
+          {pets.length > 1 && (
+            <Animated.View entering={FadeInDown.delay(240).duration(450)}>
+              <PetStrip pets={pets} onSelect={(id) => router.push(`/pets/${id}`)} />
+            </Animated.View>
+          )}
           <EmptyState
             title={hasPets ? "Nothing due today" : "No pets yet"}
             body={
@@ -130,16 +136,20 @@ export default function Today() {
       ListHeaderComponent={
         showGlance ? (
           <>
-            <Text style={styles.dateLabel}>{todayLabel()}</Text>
-            <GlanceCard summary={summary} streak={dashboard.streak} />
-            <WeekCard dashboard={dashboard} />
-            {pets.length > 1 && <PetStrip pets={pets} onSelect={(id) => router.push(`/pets/${id}`)} />}
+            <Greeting />
+            <Animated.View entering={FadeInDown.duration(450)}><GlanceCard summary={summary} streak={dashboard.streak} /></Animated.View>
+            <Animated.View entering={FadeInDown.delay(120).duration(450)}><WeekCard dashboard={dashboard} /></Animated.View>
+            {pets.length > 1 && (
+            <Animated.View entering={FadeInDown.delay(240).duration(450)}>
+              <PetStrip pets={pets} onSelect={(id) => router.push(`/pets/${id}`)} />
+            </Animated.View>
+          )}
           </>
         ) : null
       }
       renderSectionHeader={({ section }) => (
         <Pressable style={styles.petHeaderRow} onPress={() => router.push(`/pets/${section.pet.id}`)}>
-          <PetAvatar name={section.pet.name} species={section.pet.species} size={28} />
+          <PetAvatar name={section.pet.name} species={section.pet.species} photoUri={section.pet.photoUri} size={28} />
           <Text style={styles.petHeader}>{section.pet.name}</Text>
         </Pressable>
       )}
@@ -205,6 +215,34 @@ async function computeDashboard(petList: Pet[], meds: Medication[]): Promise<Das
   return { week, streak, perPet: [...petTotals.values()].filter((p) => p.scheduled > 0) };
 }
 
+/** Counts a number up from 0 to `target` (ease-out) — used for the hero stats so they land instead of just appearing. */
+function useCountUp(target: number, duration = 750) {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const start = Date.now();
+    const tick = () => {
+      const t = Math.min(1, (Date.now() - start) / duration);
+      setValue(Math.round(target * (1 - Math.pow(1 - t, 3))));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    tick();
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  return value;
+}
+
+function Greeting() {
+  const h = new Date().getHours();
+  const hello = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+  return (
+    <Animated.View entering={FadeInDown.duration(400)} style={{ marginBottom: space.md }}>
+      <Text style={styles.greeting}>{hello}</Text>
+      <Text style={styles.dateLabel}>{todayLabel()}</Text>
+    </Animated.View>
+  );
+}
+
 /**
  * The first thing on the screen: a fill bar answers "am I on track today"
  * at a glance, with the pet count and streak as supporting facts rather
@@ -227,16 +265,21 @@ function GlanceCard({ summary, streak }: { summary: Summary; streak: number }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pct]);
 
+  const shownTaken = useCountUp(summary.dosesTaken);
+  const shownTotal = useCountUp(summary.dosesToday);
+
   const barStyle = useAnimatedStyle(() => ({ width: `${progress.value}%` }));
   const cardStyle = useAnimatedStyle(() => ({ opacity: cardOpacity.value, transform: [{ translateY: cardRise.value }] }));
 
   return (
     <Animated.View style={[styles.glanceCard, cardStyle]}>
+      <View pointerEvents="none" style={styles.glanceOrbBig} />
+      <View pointerEvents="none" style={styles.glanceOrbSmall} />
       <View style={styles.glanceTop}>
         <View>
           <Text style={styles.glanceCount}>
-            {summary.dosesTaken}
-            <Text style={styles.glanceCountTotal}> / {summary.dosesToday}</Text>
+            {shownTaken}
+            <Text style={styles.glanceCountTotal}> / {shownTotal}</Text>
           </Text>
           <Text style={styles.glanceLabel}>doses given today</Text>
         </View>
@@ -293,7 +336,7 @@ function WeekCard({ dashboard }: { dashboard: Dashboard }) {
             const pct = scheduled > 0 ? Math.round((taken / scheduled) * 100) : 0;
             return (
               <View key={pet.id} style={styles.perPetRow}>
-                <PetAvatar name={pet.name} species={pet.species} size={22} />
+                <PetAvatar name={pet.name} species={pet.species} photoUri={pet.photoUri} size={22} />
                 <Text style={styles.perPetName} numberOfLines={1}>{pet.name}</Text>
                 <View style={styles.perPetTrack}>
                   <View style={[styles.perPetFill, { width: `${pct}%` }, pct === 100 && styles.fillDone]} />
@@ -340,11 +383,13 @@ function PetStrip({ pets, onSelect }: { pets: Pet[]; onSelect: (id: string) => v
       contentContainerStyle={styles.stripContent}
       style={styles.strip}
     >
-      {pets.map((pet) => (
-        <Pressable key={pet.id} style={styles.stripItem} onPress={() => onSelect(pet.id)}>
-          <PetAvatar name={pet.name} species={pet.species} size={48} />
-          <Text style={styles.stripLabel} numberOfLines={1}>{pet.name}</Text>
-        </Pressable>
+      {pets.map((pet, i) => (
+        <Animated.View key={pet.id} entering={ZoomIn.delay(320 + i * 70).duration(320)}>
+          <Pressable style={styles.stripItem} onPress={() => onSelect(pet.id)}>
+            <PetAvatar name={pet.name} species={pet.species} photoUri={pet.photoUri} size={48} />
+            <Text style={styles.stripLabel} numberOfLines={1}>{pet.name}</Text>
+          </Pressable>
+        </Animated.View>
       ))}
     </ScrollView>
   );
@@ -383,25 +428,28 @@ const styles = StyleSheet.create({
   petHeader: { fontFamily: font.heading, fontSize: 20, color: color.ink },
   fab: { position: "absolute", bottom: space.xl, alignSelf: "center", paddingHorizontal: space.xl, borderRadius: 999 },
 
+  greeting: { fontFamily: font.heading, fontSize: 26, color: color.ink },
   glanceCard: {
-    backgroundColor: color.paperRaised, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: color.hairline, padding: space.lg, marginBottom: space.md,
+    backgroundColor: color.ink, borderRadius: radius.lg + 6,
+    padding: space.lg, marginBottom: space.md, overflow: "hidden",
   },
+  glanceOrbBig: { position: "absolute", right: -50, top: -60, width: 190, height: 190, borderRadius: 95, backgroundColor: color.clay, opacity: 0.22 },
+  glanceOrbSmall: { position: "absolute", right: 40, bottom: -46, width: 100, height: 100, borderRadius: 50, backgroundColor: color.clay, opacity: 0.14 },
   glanceTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" },
-  glanceCount: { fontFamily: font.heading, fontSize: 34, color: color.ink },
-  glanceCountTotal: { fontSize: 20, color: color.inkFaint },
-  glanceLabel: { fontFamily: font.body, fontSize: 13, color: color.inkFaint, marginTop: 2 },
+  glanceCount: { fontFamily: font.heading, fontSize: 44, color: color.paper },
+  glanceCountTotal: { fontSize: 22, color: "rgba(247,243,236,0.5)" },
+  glanceLabel: { fontFamily: font.body, fontSize: 13, color: "rgba(247,243,236,0.65)", marginTop: 2 },
   pillStack: { alignItems: "flex-end", gap: space.xs },
-  remainingPill: { backgroundColor: color.mossFaint, paddingVertical: 6, paddingHorizontal: space.md, borderRadius: 999 },
+  remainingPill: { backgroundColor: "rgba(247,243,236,0.14)", paddingVertical: 6, paddingHorizontal: space.md, borderRadius: 999 },
   remainingPillDone: { backgroundColor: color.mossFaint },
-  remainingPillText: { fontFamily: font.body, fontSize: 13, fontWeight: "700", color: color.clayDeep },
+  remainingPillText: { fontFamily: font.body, fontSize: 13, fontWeight: "700", color: color.paper },
   remainingPillTextDone: { color: color.moss },
   streakPill: { backgroundColor: "#F3E6C8", paddingVertical: 4, paddingHorizontal: space.sm, borderRadius: 999 },
   streakPillText: { fontFamily: font.body, fontSize: 11, fontWeight: "700", color: color.amber },
-  track: { height: 8, borderRadius: 4, backgroundColor: color.hairline, marginTop: space.lg, overflow: "hidden" },
+  track: { height: 8, borderRadius: 4, backgroundColor: "rgba(247,243,236,0.16)", marginTop: space.lg, overflow: "hidden" },
   fill: { height: "100%", borderRadius: 4, backgroundColor: color.clay },
   fillDone: { backgroundColor: color.moss },
-  glanceFooter: { fontFamily: font.body, fontSize: 12, color: color.inkFaint, marginTop: space.sm },
+  glanceFooter: { fontFamily: font.body, fontSize: 12, color: "rgba(247,243,236,0.6)", marginTop: space.sm },
 
   weekCard: {
     backgroundColor: color.paperRaised, borderRadius: radius.lg,
