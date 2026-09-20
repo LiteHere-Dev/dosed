@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, AppState } from "react-native";
+import { View, Text, StyleSheet, AppState, ViewStyle } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { PetAvatar } from "@/components/PixelArt";
 import { hourIndex, quoteForHour } from "@/lib/quotes";
@@ -12,7 +12,7 @@ import { color, font, radius, space } from "@/theme/tokens";
  * app returns to the foreground) is cheap and keeps it from ever being more
  * than a few seconds late, without one very long timer.
  */
-export function PlayfulQuote() {
+export function PlayfulQuote({ style }: { style?: ViewStyle }) {
   const [hour, setHour] = useState(() => hourIndex());
 
   useEffect(() => {
@@ -26,7 +26,7 @@ export function PlayfulQuote() {
 
   return (
     // key makes the card re-mount (and fade in) whenever the quote changes
-    <Animated.View key={index} entering={FadeIn.duration(600)} style={styles.card}>
+    <Animated.View key={index} entering={FadeIn.duration(600)} style={[styles.card, style]}>
       <PetAvatar name="" species={index % 2 === 0 ? "cat" : "dog"} size={44} />
       <View style={styles.textWrap}>
         <Text style={styles.label}>Quote of the hour</Text>

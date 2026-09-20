@@ -20,6 +20,14 @@ export default function PetsList() {
     <View style={{ flex: 1, backgroundColor: color.paper, padding: space.lg }}>
       <FlatList
         style={{ flex: 1 }}
+        // flexGrow lets the content area fill the whole list, and the footer
+        // wrapper grows to take the leftover space below the last pet — so the
+        // quote centers itself in whatever gap there is (bigger with 1 pet,
+        // smaller with 3) with no measuring needed. With enough pets to
+        // fill the screen the gap is 0 and the quote simply follows the list.
+        contentContainerStyle={{ flexGrow: 1 }}
+        ListFooterComponent={<PlayfulQuote style={{ marginBottom: 0 }} />}
+        ListFooterComponentStyle={{ flexGrow: 1, justifyContent: "center", paddingVertical: space.lg }}
         data={pets}
         keyExtractor={(p) => p.id}
         ListEmptyComponent={<EmptyState title="No pets yet" body="Add your first pet to start a medication schedule." art={<PixelCat pixelSize={8} />} />}
@@ -35,7 +43,6 @@ export default function PetsList() {
           </Animated.View>
         )}
       />
-      <PlayfulQuote />
       <Button label="Add a pet" onPress={() => router.push("/pets/new")} />
     </View>
   );
