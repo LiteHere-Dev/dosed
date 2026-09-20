@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { View, Text, StyleSheet, Alert, ScrollView, TextInput } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { me, resendVerification, logout, logoutAllDevices, changePassword, getAuditLog, exportAccountData, deleteAccount, ApiClientError } from "@/lib/api";
 import { resetDb } from "@/db/schema";

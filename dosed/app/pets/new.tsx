@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, Text, TextInput, StyleSheet, ScrollView, Image, Pressable } from "react-native";
+import { View, Text, TextInput, StyleSheet, ScrollView, Image, Pressable, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { createPet, setPetPhoto } from "@/db/schema";
@@ -21,7 +21,10 @@ export default function NewPet() {
 
   const pickPhoto = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return;
+    if (!perm.granted) {
+      Alert.alert("Permission needed", "Allow photo access in your device settings to add a pet photo.");
+      return;
+    }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.7, allowsEditing: true, aspect: [1, 1] });
     if (!result.canceled) setLocalPhotoUri(result.assets[0].uri);
   };
@@ -44,11 +47,11 @@ export default function NewPet() {
         try {
           const marker = await uploadLocalPhoto(pet.id, localPhotoUri);
           await setPetPhoto(pet.id, marker);
-        } catch {
-          // Offline or upload hiccup: pet is saved, photo just didn't
-          // attach. Not surfaced as an error — sync will retry on next
-          // successful app foreground once we add a retry queue (skipped
-          // for now, this is the same fire-and-forget spirit as runSync).
+        } catch (e) {
+          // Pet is saved; only the photo failed. Tell the person instead of
+          // failing silently, and log the real reason for debugging.
+          console.warn("Photo upload failed:", e);
+          Alert.alert("Photo not uploaded", "Your pet was saved, but the photo couldn't be uploaded. Check your connection and try again later.");
         }
       }
       router.back();

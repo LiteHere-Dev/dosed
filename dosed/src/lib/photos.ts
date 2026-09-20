@@ -1,4 +1,7 @@
-import * as FileSystem from "expo-file-system";
+// SDK 54+ made the default "expo-file-system" export the new object-based API;
+// uploadAsync / cacheDirectory / getInfoAsync etc. live in the /legacy entry now.
+// Importing them from the default entry throws at runtime, which is what broke uploads.
+import * as FileSystem from "expo-file-system/legacy";
 import { presignPhotoUpload, downloadPhoto, deletePhoto } from "./api";
 
 // photoUri on a Pet is one of: null, a local file:// URI (picked but not
@@ -10,12 +13,18 @@ const cacheDir = FileSystem.cacheDirectory + "pet-photos/";
 
 /** Uploads a locally-picked photo to R2 and returns the "r2:<key>" marker to store as photoUri. */
 export async function uploadLocalPhoto(petId: string, localUri: string): Promise<string> {
-  const ext = localUri.toLowerCase().endsWith(".png") ? "png" : "jpg";
+  const ext = localUri.toLowerCase().split("?")[0].endsWith(".png") ? "png" : "jpg";
   const { uploadUrl, key, contentType } = await presignPhotoUpload(petId, ext);
   // Content-Type must match exactly what was signed into uploadUrl's
   // query string, or R2 rejects the PUT with a signature mismatch.
   const info = await FileSystem.uploadAsync(uploadUrl, localUri, { httpMethod: "PUT", headers: { "Content-Type": contentType } });
-  if (info.status >= 300) throw new Error(`photo upload failed: ${info.status}`);
+  if (info.status >= 300) throw new Error(`photo upload failed: ${info.status} ${info.body?.slice(0, 200) ?? ""}`);
+  // Cache the local copy under the same path resolvePhotoUri looks for, so the
+  // photo shows instantly without a re-download from the server.
+  try {
+    await FileSystem.makeDirectoryAsync(cacheDir, { intermediates: true }).catch(() => {});
+    await FileSystem.copyAsync({ from: localUri, to: cacheDir + key.replace(/\//g, "_") });
+  } catch {}
   return R2_PREFIX + key;
 }
 
