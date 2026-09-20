@@ -1,11 +1,25 @@
+# dependencies
 node_modules/
+
+# Expo / build output
 .expo/
 dist/
+web-build/
+*.apk
+*.aab
+*.ipa
+
+# secrets — never commit
 .env
-.env.local
+.env.*
+!.env.example
+google-service-account.json
 *.p8
 *.p12
-*.key
+*.pem
+*.jks
 *.mobileprovision
-google-service-account.json
+
+# misc
 .DS_Store
+npm-debug.*

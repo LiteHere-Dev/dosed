@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Button } from "@/components/Button";
 import { color, font, space } from "@/theme/tokens";
+import { API_URL } from "@/lib/api";
 
 type Status = "checking" | "ok" | "error";
 
@@ -14,7 +15,6 @@ export default function VerifyEmail() {
   useEffect(() => {
     if (!token) return setStatus("error");
     (async () => {
-      const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3000";
       try {
         const res = await fetch(`${API_URL}/api/account/verify-email`, {
           method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token }),

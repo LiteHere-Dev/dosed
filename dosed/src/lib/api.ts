@@ -8,7 +8,9 @@ const REFRESH_KEY = "dosed_refresh_token";
 // app.config, or an EAS build profile). EXPO_PUBLIC_ vars are inlined into
 // the JS bundle at build time — fine for a base URL, never put a secret
 // behind this prefix.
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3000";
+// localhost is a dev-only fallback: in a release build a missing
+// EXPO_PUBLIC_API_URL should fail loudly, not quietly point at the phone itself.
+export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? (__DEV__ ? "http://localhost:3000" : "");
 
 // "Stay signed in" support: when the person unchecks it at login/register,
 // tokens live only in these module-level variables for the lifetime of the

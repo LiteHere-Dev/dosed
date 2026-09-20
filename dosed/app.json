@@ -10,7 +10,14 @@
     "plugins": [
       "expo-router",
       "expo-sqlite",
-      "expo-image-picker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Dosed uses your photo library so you can add a photo of your pet.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
       "expo-updates",
       "expo-secure-store",
       "expo-sharing",
@@ -18,14 +25,16 @@
     ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.dosed.app"
+      "bundleIdentifier": "com.dosed.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.dosed.app",
       "permissions": [
         "android.permission.SCHEDULE_EXACT_ALARM",
-        "android.permission.POST_NOTIFICATIONS",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.POST_NOTIFICATIONS"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
