@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, AppState, ViewStyle } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { PetAvatar } from "@/components/PixelArt";
 import { hourIndex, quoteForHour } from "@/lib/quotes";
-import { color, font, radius, space } from "@/theme/tokens";
+import { color, font, space } from "@/theme/tokens";
 
 /**
  * A small "quote of the hour" card. The quote is a pure function of the
@@ -39,9 +39,8 @@ export function PlayfulQuote({ style }: { style?: ViewStyle }) {
 const styles = StyleSheet.create({
   card: {
     flexDirection: "row", alignItems: "center", gap: space.md,
-    backgroundColor: color.paperRaised, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: color.hairline,
-    padding: space.md, marginBottom: space.md,
+    // No background or border: the quote sits directly on the page.
+    paddingVertical: space.md, paddingHorizontal: space.xs, marginBottom: space.md,
   },
   textWrap: { flex: 1 },
   label: {
