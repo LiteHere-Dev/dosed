@@ -51,7 +51,8 @@ export default function NewPet() {
           // Pet is saved; only the photo failed. Tell the person instead of
           // failing silently, and log the real reason for debugging.
           console.warn("Photo upload failed:", e);
-          Alert.alert("Photo not uploaded", "Your pet was saved, but the photo couldn't be uploaded. Check your connection and try again later.");
+          const reason = e instanceof Error ? e.message : String(e);
+          Alert.alert("Photo not uploaded", `Your pet was saved, but the photo couldn't be uploaded.\n\nReason: ${reason}`);
         }
       }
       router.back();
