@@ -87,6 +87,11 @@ export default function RootLayout() {
           headerTintColor: color.ink,
           headerShadowVisible: false,
           contentStyle: { backgroundColor: color.paper },
+          // Every push slides in from the right and pops back the same way;
+          // modals rise from the bottom. Set once here so no screen falls
+          // back to a platform-default cut or fade.
+          animation: "slide_from_right",
+          animationDuration: 280,
           headerLeft: () =>
             authed ? (
               <Pressable onPress={() => setMenuOpen(true)} hitSlop={12} style={{ marginRight: 12 }}>
@@ -99,6 +104,7 @@ export default function RootLayout() {
           name="index"
           options={{
             title: "Today",
+            animation: "fade",
             headerRight: () => (
               <Pressable onPress={() => router.push("/settings")} hitSlop={8}>
                 <Feather name="settings" size={20} color={color.clayDeep} />
@@ -107,18 +113,18 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen name="pets/index" options={{ title: "Pets" }} />
-        <Stack.Screen name="pets/new" options={{ title: "Add a pet", presentation: "modal" }} />
-        <Stack.Screen name="pets/edit" options={{ title: "Edit pet", presentation: "modal" }} />
+        <Stack.Screen name="pets/new" options={{ title: "Add a pet", presentation: "modal", animation: "slide_from_bottom" }} />
+        <Stack.Screen name="pets/edit" options={{ title: "Edit pet", presentation: "modal", animation: "slide_from_bottom" }} />
         <Stack.Screen name="pets/[id]" options={{ title: "" }} />
-        <Stack.Screen name="meds/new" options={{ title: "Add medication", presentation: "modal" }} />
+        <Stack.Screen name="meds/new" options={{ title: "Add medication", presentation: "modal", animation: "slide_from_bottom" }} />
         <Stack.Screen name="meds/[id]" options={{ title: "Medication" }} />
         <Stack.Screen name="history/[petId]" options={{ title: "History" }} />
         <Stack.Screen name="settings" options={{ title: "Settings" }} />
         <Stack.Screen name="legal/privacy" options={{ title: "Privacy Policy" }} />
         <Stack.Screen name="legal/terms" options={{ title: "Terms & Conditions" }} />
         <Stack.Screen name="onboarding/index" options={{ headerShown: false }} />
-        <Stack.Screen name="auth/login" options={{ headerShown: false }} />
-        <Stack.Screen name="auth/register" options={{ headerShown: false }} />
+        <Stack.Screen name="auth/login" options={{ headerShown: false, animation: "fade" }} />
+        <Stack.Screen name="auth/register" options={{ headerShown: false, animation: "fade" }} />
         <Stack.Screen name="auth/forgot-password" options={{ title: "Reset password" }} />
         <Stack.Screen name="auth/reset-password" options={{ title: "Reset password" }} />
         <Stack.Screen name="auth/verify-email" options={{ title: "Verify email", headerShown: false }} />

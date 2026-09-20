@@ -1,11 +1,13 @@
 import { useCallback, useState } from "react";
-import { View, Text, FlatList, Pressable, StyleSheet, Alert, Image } from "react-native";
+import { View, Text, FlatList, Pressable, StyleSheet, Image } from "react-native";
+import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { useFocusEffect, useLocalSearchParams, useRouter, Stack } from "expo-router";
 import { getPet, listMedications, deletePet } from "@/db/schema";
 import { resolvePhotoUri, deleteUploadedPhoto } from "@/lib/photos";
 import { cancelForMedication } from "@/lib/notifications";
 import { runSync } from "@/lib/sync";
 import { Button } from "@/components/Button";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PetAvatar } from "@/components/PixelArt";
 import { Feather } from "@expo/vector-icons";
 import { EmptyState } from "@/components/EmptyState";
@@ -18,6 +20,7 @@ export default function PetDetail() {
   const [pet, setPet] = useState<Pet | null>(null);
   const [meds, setMeds] = useState<Medication[]>([]);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -43,9 +46,9 @@ export default function PetDetail() {
         }}
       />
       {photoUri ? (
-        <Image source={{ uri: photoUri }} style={styles.photo} />
+        <Animated.Image entering={FadeIn.duration(350)} source={{ uri: photoUri }} style={styles.photo} />
       ) : pet ? (
-        <View style={{ marginBottom: space.md }}><PetAvatar name={pet.name} species={pet.species} size={88} /></View>
+        <Animated.View entering={FadeIn.duration(300)} style={{ marginBottom: space.md }}><PetAvatar name={pet.name} species={pet.species} size={88} /></Animated.View>
       ) : null}
       {pet && (
         <Text style={styles.subtitle}>
@@ -57,38 +60,37 @@ export default function PetDetail() {
         keyExtractor={(m) => m.id}
         style={{ marginTop: space.lg }}
         ListEmptyComponent={<EmptyState title="No medications" body="Add one to start scheduling reminders." />}
-        renderItem={({ item }) => (
-          <Pressable style={styles.card} onPress={() => router.push(`/meds/${item.id}`)}>
-            <Text style={styles.medName}>{item.name}{!item.active ? " (inactive)" : ""}</Text>
-            <Text style={styles.meta}>{item.dosageValue} {item.dosageUnit} · {scheduleLabel(item)}</Text>
-          </Pressable>
+        renderItem={({ item, index }) => (
+          <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 60).duration(380)}>
+            <Pressable style={({ pressed }) => [styles.card, pressed && { opacity: 0.6 }]} onPress={() => router.push(`/meds/${item.id}`)}>
+              <Text style={styles.medName}>{item.name}{!item.active ? " (inactive)" : ""}</Text>
+              <Text style={styles.meta}>{item.dosageValue} {item.dosageUnit} · {scheduleLabel(item)}</Text>
+            </Pressable>
+          </Animated.View>
         )}
       />
       <View style={{ gap: space.sm }}>
         <Button label="Edit pet" variant="quiet" onPress={() => router.push({ pathname: "/pets/edit", params: { petId: id } })} />
         <Button label="Add medication" onPress={() => router.push({ pathname: "/meds/new", params: { petId: id } })} />
         <Button label="View history / export" variant="quiet" onPress={() => router.push(`/history/${id}`)} />
-        <Button
-          label="Delete pet"
-          variant="danger"
-          onPress={() =>
-            Alert.alert("Delete pet?", "This also removes its medications and dose history.", [
-              { text: "Cancel", style: "cancel" },
-              {
-                text: "Delete",
-                style: "destructive",
-                onPress: async () => {
-                  await Promise.all(meds.map((m) => cancelForMedication(m.id)));
-                  deleteUploadedPhoto(pet?.photoUri ?? null).catch(() => {}); // best-effort, see photos.ts
-                  await deletePet(id);
-                  router.back();
-                  runSync().catch(() => {});
-                },
-              },
-            ])
-          }
-        />
+        <Button label="Delete pet" variant="danger" onPress={() => setConfirmDelete(true)} />
       </View>
+      <ConfirmDialog
+        visible={confirmDelete}
+        title="Delete pet?"
+        message="This also removes its medications and dose history."
+        confirmLabel="Delete"
+        destructive
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={async () => {
+          setConfirmDelete(false);
+          await Promise.all(meds.map((m) => cancelForMedication(m.id)));
+          deleteUploadedPhoto(pet?.photoUri ?? null).catch(() => {}); // best-effort, see photos.ts
+          await deletePet(id);
+          router.back();
+          runSync().catch(() => {});
+        }}
+      />
     </View>
   );
 }

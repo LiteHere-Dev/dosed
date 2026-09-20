@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { View, Text, FlatList, Pressable, StyleSheet } from "react-native";
+import Animated, { FadeInDown, LinearTransition } from "react-native-reanimated";
 import { useFocusEffect, useRouter } from "expo-router";
 import { listPets } from "@/db/schema";
 import { Button } from "@/components/Button";
@@ -20,14 +21,16 @@ export default function PetsList() {
         data={pets}
         keyExtractor={(p) => p.id}
         ListEmptyComponent={<EmptyState title="No pets yet" body="Add your first pet to start a medication schedule." art={<PixelCat pixelSize={8} />} />}
-        renderItem={({ item }) => (
-          <Pressable style={styles.card} onPress={() => router.push(`/pets/${item.id}`)}>
+        renderItem={({ item, index }) => (
+          <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 60).duration(380)} layout={LinearTransition.duration(220)}>
+          <Pressable style={({ pressed }) => [styles.card, pressed && { opacity: 0.6 }]} onPress={() => router.push(`/pets/${item.id}`)}>
             <PetAvatar name={item.name} species={item.species} photoUri={item.photoUri} size={44} />
             <View style={{ flex: 1 }}>
               <Text style={styles.name}>{item.name}</Text>
               <Text style={styles.meta}>{item.species}{item.breed ? ` · ${item.breed}` : ""}</Text>
             </View>
           </Pressable>
+          </Animated.View>
         )}
       />
       <Button label="Add a pet" onPress={() => router.push("/pets/new")} />

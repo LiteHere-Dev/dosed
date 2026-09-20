@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Modal, View, Text, Pressable, StyleSheet, Animated } from "react-native";
 import { color, font, space, radius, motion } from "@/theme/tokens";
 
@@ -34,30 +34,42 @@ export function ConfirmDialog({
 }: Props) {
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.96)).current;
+  const [mounted, setMounted] = useState(visible);
+  // Remember the last visible text so it doesn't change while the dialog is
+  // fading out (callers often clear their state the moment it closes).
+  const shown = useRef({ title, message, confirmLabel, cancelLabel });
+  if (visible) shown.current = { title, message, confirmLabel, cancelLabel };
 
   useEffect(() => {
     if (visible) {
+      setMounted(true);
       opacity.setValue(0);
       scale.setValue(0.96);
       Animated.timing(opacity, { toValue: 1, duration: motion.durationEnter, easing: motion.easeOut, useNativeDriver: true }).start();
       Animated.timing(scale, { toValue: 1, duration: motion.durationEnter, easing: motion.easeOut, useNativeDriver: true }).start();
+      return;
     }
+    Animated.timing(opacity, { toValue: 0, duration: 130, easing: motion.easeIn, useNativeDriver: true }).start(({ finished }) => {
+      if (finished) setMounted(false);
+    });
+    Animated.timing(scale, { toValue: 0.97, duration: 130, easing: motion.easeIn, useNativeDriver: true }).start();
   }, [visible]);
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onCancel}>
+    <Modal visible={mounted} transparent animationType="none" onRequestClose={onCancel}>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: color.overlay, opacity }]} />
       <Pressable style={styles.backdrop} onPress={onCancel}>
         <Animated.View style={[styles.card, { opacity, transform: [{ scale }] }]}>
           {/* Stop taps on the card itself from bubbling to the backdrop's onPress (which would dismiss it) */}
           <Pressable onPress={() => {}}>
-            <Text style={styles.title}>{title}</Text>
-            <Text style={styles.message}>{message}</Text>
+            <Text style={styles.title}>{shown.current.title}</Text>
+            <Text style={styles.message}>{shown.current.message}</Text>
             <View style={styles.row}>
               <Pressable onPress={onCancel} style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]} hitSlop={8}>
-                <Text style={styles.cancelLabel}>{cancelLabel}</Text>
+                <Text style={styles.cancelLabel}>{shown.current.cancelLabel}</Text>
               </Pressable>
               <Pressable onPress={onConfirm} style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]} hitSlop={8}>
-                <Text style={[styles.confirmLabel, destructive && styles.destructiveLabel]}>{confirmLabel}</Text>
+                <Text style={[styles.confirmLabel, destructive && styles.destructiveLabel]}>{shown.current.confirmLabel}</Text>
               </Pressable>
             </View>
           </Pressable>
@@ -68,7 +80,7 @@ export function ConfirmDialog({
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: color.overlay, alignItems: "center", justifyContent: "center", padding: space.xl },
+  backdrop: { flex: 1, alignItems: "center", justifyContent: "center", padding: space.xl },
   card: {
     backgroundColor: color.paper, borderRadius: radius.md, padding: space.lg,
     width: "100%", maxWidth: 340, borderWidth: 1, borderColor: color.hairline,

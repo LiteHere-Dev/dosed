@@ -117,12 +117,14 @@ export default function Today() {
             }
             art={<BreathingArt />}
           />
+          <Animated.View entering={FadeInDown.delay(360).duration(450)}>
+            <Button
+              label={hasPets ? "Go to pets →" : "Add your first pet →"}
+              onPress={() => router.push("/pets")}
+              style={styles.inlineCta}
+            />
+          </Animated.View>
         </ScrollView>
-        <Button
-          label={hasPets ? "Go to pets →" : "Add your first pet →"}
-          onPress={() => router.push("/pets")}
-          style={styles.fab}
-        />
       </View>
     );
   }
@@ -273,8 +275,8 @@ function GlanceCard({ summary, streak }: { summary: Summary; streak: number }) {
 
   return (
     <Animated.View style={[styles.glanceCard, cardStyle]}>
-      <View pointerEvents="none" style={styles.glanceOrbBig} />
-      <View pointerEvents="none" style={styles.glanceOrbSmall} />
+      <View pointerEvents="none" style={styles.glanceRingBig} />
+      <View pointerEvents="none" style={styles.glanceRingSmall} />
       <View style={styles.glanceTop}>
         <View>
           <Text style={styles.glanceCount}>
@@ -426,15 +428,15 @@ const styles = StyleSheet.create({
   dateLabel: { fontFamily: font.body, fontSize: 13, color: color.inkFaint, marginBottom: space.sm },
   petHeaderRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.lg, marginBottom: space.sm },
   petHeader: { fontFamily: font.heading, fontSize: 20, color: color.ink },
-  fab: { position: "absolute", bottom: space.xl, alignSelf: "center", paddingHorizontal: space.xl, borderRadius: 999 },
+  inlineCta: { alignSelf: "center", paddingHorizontal: space.xl, borderRadius: 999, marginTop: space.sm },
 
   greeting: { fontFamily: font.heading, fontSize: 26, color: color.ink },
   glanceCard: {
     backgroundColor: color.ink, borderRadius: radius.lg + 6,
     padding: space.lg, marginBottom: space.md, overflow: "hidden",
   },
-  glanceOrbBig: { position: "absolute", right: -50, top: -60, width: 190, height: 190, borderRadius: 95, backgroundColor: color.clay, opacity: 0.22 },
-  glanceOrbSmall: { position: "absolute", right: 40, bottom: -46, width: 100, height: 100, borderRadius: 50, backgroundColor: color.clay, opacity: 0.14 },
+  glanceRingBig: { position: "absolute", right: -70, top: -80, width: 220, height: 220, borderRadius: 110, borderWidth: 1, borderColor: "rgba(247,243,236,0.09)" },
+  glanceRingSmall: { position: "absolute", right: -30, top: -40, width: 140, height: 140, borderRadius: 70, borderWidth: 1, borderColor: "rgba(247,243,236,0.09)" },
   glanceTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" },
   glanceCount: { fontFamily: font.heading, fontSize: 44, color: color.paper },
   glanceCountTotal: { fontSize: 22, color: "rgba(247,243,236,0.5)" },

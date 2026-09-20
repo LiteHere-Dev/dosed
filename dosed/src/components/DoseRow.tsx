@@ -1,5 +1,5 @@
 import { View, Text, Pressable, StyleSheet } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import Animated, { FadeIn, LinearTransition, ZoomIn, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { color, font, radius, space, motion } from "@/theme/tokens";
 import type { DoseStatus } from "@/db/types";
 
@@ -31,7 +31,7 @@ export function DoseRow({ medName, dosageLabel, time, status, onMarkTaken, onMar
   const fadeStyle = useAnimatedStyle(() => ({ opacity: rowOpacity.value }));
 
   return (
-    <Animated.View style={[styles.row, fadeStyle]}>
+    <Animated.View entering={FadeIn.duration(280)} layout={LinearTransition.duration(220)} style={[styles.row, fadeStyle]}>
       <View style={styles.info}>
         <Text style={styles.time}>{time}</Text>
         <Text style={styles.name}>{medName}</Text>
