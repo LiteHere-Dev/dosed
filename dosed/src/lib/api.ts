@@ -181,9 +181,29 @@ export const deleteAccount = (password: string) => request<void>("/api/account/m
 // --- sync ---
 
 export const pullChanges = (since: string) =>
-  request<{ serverTime: string; pets: any[]; medications: any[]; doseLogs: any[] }>(`/api/sync/pull?since=${encodeURIComponent(since)}`);
-export const pushChanges = (payload: { pets: any[]; medications: any[]; doseLogs: any[] }) =>
+  request<{ serverTime: string; pets: any[]; medications: any[]; doseLogs: any[]; healthLogs: any[] }>(`/api/sync/pull?since=${encodeURIComponent(since)}`);
+export const pushChanges = (payload: { pets: any[]; medications: any[]; doseLogs: any[]; healthLogs: any[] }) =>
   request<{ serverTime: string }>("/api/sync/push", { method: "POST", body: JSON.stringify(payload) });
+
+// --- household sharing ---
+
+export const inviteCaregiver = (petId: string, email: string) =>
+  request<{ invited: true }>(`/api/household/pets/${petId}/invite`, { method: "POST", body: JSON.stringify({ email }) });
+export const acceptInvite = (token: string) =>
+  request<{ accepted: true; petId: string }>("/api/household/accept", { method: "POST", body: JSON.stringify({ token }) });
+export const listMembers = (petId: string) =>
+  request<{ members: { id: string; invitedEmail: string; role: string; status: string; createdAt: string; acceptedAt: string | null }[] }>(`/api/household/pets/${petId}/members`);
+export const removeMember = (petId: string, shareId: string) =>
+  request<void>(`/api/household/pets/${petId}/members/${shareId}`, { method: "DELETE" });
+export const listSharedWithMe = () =>
+  request<{ pets: { petId: string; petName: string; ownerName: string }[] }>("/api/household/shared-with-me");
+
+// --- notifications (email) ---
+
+export const sendRefillAlert = (payload: { medicationId: string; medicationName: string; petName: string; remainingQuantity: number; unit: string }) =>
+  request<{ sent: true }>("/api/notify/refill", { method: "POST", body: JSON.stringify(payload) });
+export const sendVetSummary = (payload: { petId: string; vetEmail: string; petName: string; rangeLabel: string; pdfBase64: string }) =>
+  request<{ sent: true }>("/api/notify/vet-summary", { method: "POST", body: JSON.stringify(payload) });
 
 // --- photo uploads ---
 // photoUri holds either a local file:// path (not yet uploaded) or an
@@ -191,7 +211,9 @@ export const pushChanges = (payload: { pets: any[]; medications: any[]; doseLogs
 // download flow built on these two calls.
 
 export const presignPhotoUpload = (petId: string, ext: "jpg" | "png") =>
-  request<{ uploadUrl: string; key: string; contentType: string }>("/api/uploads/presign", { method: "POST", body: JSON.stringify({ petId, ext }) });
+  request<{ uploadUrl: string; key: string; contentType: string }>("/api/uploads/presign", { method: "POST", body: JSON.stringify({ petId, kind: "pet", ext }) });
+export const presignMedicationPhotoUpload = (medicationId: string, ext: "jpg" | "png") =>
+  request<{ uploadUrl: string; key: string; contentType: string }>("/api/uploads/presign", { method: "POST", body: JSON.stringify({ medicationId, kind: "medication", ext }) });
 
 /** Deletes the uploaded object from R2. Fire-and-forget from the caller's side — a failed cleanup leaves an orphaned blob, not a broken app. */
 export async function deletePhoto(key: string): Promise<void> {

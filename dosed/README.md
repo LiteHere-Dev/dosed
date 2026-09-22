@@ -60,11 +60,11 @@ Render, Fly.io, or a VPS with `docker compose` work the same way — the
 Dockerfile is host-agnostic. The container's `CMD` runs migrations then
 starts the server, so there's no separate migration step in CI/CD.
 
-To actually deliver verification/reset emails, set `SMTP_HOST`,
-`SMTP_USER`, `SMTP_PASS` to any provider that speaks SMTP (Resend,
-Postmark, SES, Mailgun, ...). Unset, those emails are logged to stdout
-instead of sent — the whole flow still works, it just won't reach a real
-inbox until you plug in a provider.
+To actually deliver verification/reset/refill/vet-summary emails, set
+`RESEND_API_KEY` (preferred — see resend.com) or `SMTP_HOST`/`SMTP_USER`/
+`SMTP_PASS` to any provider that speaks SMTP (Postmark, SES, Mailgun, ...).
+Unset, those emails are logged to stdout instead of sent — the whole flow
+still works, it just won't reach a real inbox until you plug in a provider.
 
 ## Accounts
 
@@ -107,13 +107,63 @@ added.
 
 ## How sync works
 
-Every synced row (`pets`, `medications`, `dose_logs`) carries `updatedAt`
-and `deletedAt`. Push/pull merge with **last-write-wins by `updatedAt`**
-in both directions, and deletes are soft (tombstoned, not removed) so a
-delete on one device propagates instead of reappearing. Sync runs after
-login, on app foreground, and as fire-and-forget after every local edit.
-There's no background sync task for a fully-closed app — add
-`expo-background-fetch` if that gap matters for you.
+Every synced row (`pets`, `medications`, `dose_logs`, `health_logs`)
+carries `updatedAt` and `deletedAt`. Push/pull merge with
+**last-write-wins by `updatedAt`** in both directions, and deletes are
+soft (tombstoned, not removed) so a delete on one device propagates
+instead of reappearing. Sync runs after login, on app foreground, and as
+fire-and-forget after every local edit. There's no background sync task
+for a fully-closed app — add `expo-background-fetch` if that gap matters
+for you.
+
+## Recent features
+
+- **Smart adherence & reminders.** A dose row can be snoozed 15/30
+  minutes (`lib/notifications.ts` `snoozeDose`). A medication flagged
+  `critical` (insulin, seizure meds, ...) gets escalating re-reminders at
+  +5/10/15/20 min if it's never marked given — all scheduled up front as
+  local notifications and cancelled the moment the dose is logged, since
+  there's no reliable background task to poll "is this still
+  outstanding" on a phone. Medications can also track `remainingQuantity`
+  / `refillThreshold`; crossing the threshold fires an on-device alert
+  and a best-effort email to the pet's owner (`lib/refill.ts`,
+  `POST /api/notify/refill`).
+- **Household sharing.** A pet owner can invite a caregiver by email
+  (`app/pets/share.tsx`, `POST /api/household/pets/:id/invite`). An
+  accepted caregiver's sync reaches the shared pet's medications and dose
+  logs (see `server/src/routes/sync.ts` `visiblePetIds`), so logging a
+  dose from either device shows up as "given by <name>" for the other —
+  preventing accidental double-dosing — while pet-profile and
+  medication-schedule edits stay owner-only.
+- **Health logs.** Quick-log buttons for side effects, mood, weight, and
+  stool consistency (`components/QuickLogButtons.tsx`), synced the same
+  way as dose logs.
+- **Vet integration.** "Export PDF for vet" now includes the health log
+  alongside the dose history; "Email summary to vet" sends the same
+  report as a PDF attachment via `POST /api/notify/vet-summary`. A
+  medication can also carry a photographed prescription label
+  (`Medication.photoUri`, reusing the R2 upload flow pets already use).
+- **Adherence calendar.** A month-view heatmap per pet
+  (`components/AdherenceCalendar.tsx`, `lib/stats.ts`) complementing the
+  existing 7-day bar chart on the dashboard.
+
+A few honest limitations worth knowing before relying on these:
+
+- Interactive lock-screen notification actions ("Mark as Given",
+  "Snooze 15m") need a custom dev client / EAS build — Expo Go doesn't
+  render custom notification categories.
+- "Critical" reminders use `interruptionLevel: "timeSensitive"` on iOS,
+  not `"critical"` — true critical alerts that bypass silent mode need a
+  special Apple entitlement that can't be self-granted.
+- A caregiver's local device only sees a newly-shared pet after accepting
+  the invite triggers a full resync (`resetSyncCursor` in
+  `lib/household.ts`) — a normal incremental pull would miss it, since
+  the pet's own `updatedAt` predates the caregiver's sync cursor.
+- Medication-schedule edits (including the prescription photo) are
+  owner-only by design; a caregiver's medication edits silently no-op at
+  the sync layer rather than erroring. If you want caregivers to edit
+  schedules too, that's a deliberate restriction to loosen, not a bug to
+  fix.
 
 ## What's genuinely covered now vs. what "bulletproof" would actually take
 

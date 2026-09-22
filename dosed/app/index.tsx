@@ -10,19 +10,21 @@ import Animated, {
   withSequence,
   withTiming,
 } from "react-native-reanimated";
-import { listPets, listActiveMedications, logsInRange, upsertDoseStatus } from "@/db/schema";
+import { listPets, listActiveMedications, logsInRange, recordDoseAndDecrement } from "@/db/schema";
 import { expandSchedule } from "@/lib/schedule";
 import { runSync } from "@/lib/sync";
+import { cancelForDose, snoozeDose } from "@/lib/notifications";
+import { raiseRefillAlert } from "@/lib/refill";
 import { DoseRow } from "@/components/DoseRow";
 import { EmptyState } from "@/components/EmptyState";
 import { PixelDog, PetAvatar } from "@/components/PixelArt";
 import { Button } from "@/components/Button";
 import { color, font, space, radius, motion } from "@/theme/tokens";
-import type { Pet, Medication, DoseStatus } from "@/db/types";
+import type { Pet, Medication, DoseStatus, DoseLog } from "@/db/types";
 
 interface Section {
   pet: Pet;
-  data: { med: Medication; scheduledAt: string; status: DoseStatus | "upcoming" }[];
+  data: { med: Medication; scheduledAt: string; status: DoseStatus | "upcoming"; loggedByLabel: string | null }[];
 }
 
 interface Summary {
@@ -65,7 +67,7 @@ export default function Today() {
       for (const dose of expandSchedule(med, dayStart, dayEnd)) {
         const log = logs.get(`${med.id}|${dose.scheduledAt}`);
         const status = log?.status ?? "upcoming";
-        section.data.push({ med, scheduledAt: dose.scheduledAt, status });
+        section.data.push({ med, scheduledAt: dose.scheduledAt, status, loggedByLabel: log?.loggedByLabel ?? null });
         dosesToday += 1;
         if (status === "taken") dosesTaken += 1;
       }
@@ -83,10 +85,16 @@ export default function Today() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const mark = async (medicationId: string, scheduledAt: string, status: DoseStatus) => {
-    await upsertDoseStatus(medicationId, scheduledAt, status);
+  const mark = async (med: Medication, pet: Pet, scheduledAt: string, status: DoseStatus) => {
+    const { crossedRefillThreshold, medication } = await recordDoseAndDecrement(med.id, scheduledAt, status);
+    cancelForDose(med.id, scheduledAt).catch(() => {});
     load();
     runSync().catch(() => {});
+    if (crossedRefillThreshold && medication) raiseRefillAlert(medication, pet).catch(() => {});
+  };
+
+  const snooze = (med: Medication, pet: Pet, scheduledAt: string, minutes: 15 | 30) => {
+    snoozeDose(med, pet, scheduledAt, minutes).catch(() => {});
   };
 
   // Always show the dashboard shell, even for a brand-new account with
@@ -167,14 +175,17 @@ export default function Today() {
           <Text style={styles.petHeader}>{section.pet.name}</Text>
         </Pressable>
       )}
-      renderItem={({ item }) => (
+      renderItem={({ item, section }) => (
         <DoseRow
           medName={item.med.name}
           dosageLabel={`${item.med.dosageValue} ${item.med.dosageUnit}`}
           time={new Date(item.scheduledAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
           status={item.status}
-          onMarkTaken={() => mark(item.med.id, item.scheduledAt, "taken")}
-          onMarkSkipped={() => mark(item.med.id, item.scheduledAt, "skipped")}
+          critical={item.med.critical}
+          loggedByLabel={item.loggedByLabel}
+          onMarkTaken={() => mark(item.med, section.pet, item.scheduledAt, "taken")}
+          onMarkSkipped={() => mark(item.med, section.pet, item.scheduledAt, "skipped")}
+          onSnooze={(minutes) => snooze(item.med, section.pet, item.scheduledAt, minutes)}
         />
       )}
     />

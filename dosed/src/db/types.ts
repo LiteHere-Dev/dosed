@@ -19,6 +19,8 @@ export interface Pet extends Synced {
   weightKg: number | null;
   photoUri: string | null;
   notes: string | null;
+  /** Vet's email, used as the default recipient for "Email to vet" (see src/lib/export.ts). */
+  vetEmail: string | null;
   createdAt: string;
 }
 
@@ -36,6 +38,15 @@ export interface Medication extends Synced {
   endDate: string | null; // ISO date, null = ongoing
   active: boolean;
   notes: string | null;
+  /** A missed dose escalates (repeating, louder reminders) instead of just sitting as "missed" — see src/lib/notifications.ts. */
+  critical: boolean;
+  /** Pill count / liquid volume on hand, in dosageUnit. Decremented by dosageValue (or amountTaken) each time a dose is logged taken/partial — see recordDoseAndDecrement in db/schema.ts. */
+  totalQuantity: number | null;
+  remainingQuantity: number | null;
+  /** Refill alert fires once remainingQuantity drops to/below this. */
+  refillThreshold: number | null;
+  /** Prescription label photo, same "r2:<key>" convention as Pet.photoUri (see src/lib/photos.ts). */
+  photoUri: string | null;
 }
 
 export interface DoseLog extends Synced {
@@ -46,4 +57,36 @@ export interface DoseLog extends Synced {
   status: DoseStatus;
   amountTaken: number | null;
   note: string | null;
+  /** Who actually tapped "Give"/"Skip" — distinct from the pet's owner for a shared household. Set by the server on push (see server/src/routes/sync.ts); null until the first sync round-trip. */
+  loggedByUserId: string | null;
+  loggedByLabel: string | null;
+}
+
+export type HealthLogType = "side_effect" | "mood" | "weight" | "stool";
+
+export interface HealthLog extends Synced {
+  id: string;
+  petId: string;
+  type: HealthLogType;
+  /** Freeform per type: a number-as-string for weight, a short label for mood/stool, a description for side_effect. */
+  value: string;
+  note: string | null;
+  occurredAt: string; // ISO datetime
+  loggedByUserId: string | null;
+  loggedByLabel: string | null;
+}
+
+export interface PetShareMember {
+  id: string;
+  invitedEmail: string;
+  role: "caregiver";
+  status: "pending" | "accepted" | "revoked";
+  createdAt: string;
+  acceptedAt: string | null;
+}
+
+export interface SharedPet {
+  petId: string;
+  petName: string;
+  ownerName: string;
 }

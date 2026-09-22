@@ -4,9 +4,11 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Feather } from "@expo/vector-icons";
-import { getDb } from "@/db/schema";
+import { getDb, getMedication, getPet, recordDoseAndDecrement } from "@/db/schema";
 import { isSignedIn } from "@/lib/api";
 import { runSync } from "@/lib/sync";
+import { registerNotificationResponseHandler, cancelForDose, snoozeDose } from "@/lib/notifications";
+import { raiseRefillAlert } from "@/lib/refill";
 import { hasOnboarded } from "@/lib/onboarding";
 import { AppMenu } from "@/components/AppMenu";
 import { UpdateBanner } from "@/components/UpdateBanner";
@@ -67,6 +69,31 @@ export default function RootLayout() {
     return () => sub.remove();
   }, []);
 
+  // Wires "Mark as Given" / "Snooze 15m" lock-screen notification actions
+  // (see lib/notifications.ts) to the same logic the in-app dose row uses,
+  // so acting from a notification behaves identically to tapping in-app —
+  // including refill-threshold checks and cancelling any pending
+  // escalation reminders for that dose.
+  useEffect(() => {
+    const sub = registerNotificationResponseHandler({
+      onMarkGiven: async (medicationId, scheduledAt) => {
+        const { crossedRefillThreshold, medication } = await recordDoseAndDecrement(medicationId, scheduledAt, "taken");
+        await cancelForDose(medicationId, scheduledAt);
+        runSync().catch(() => {});
+        if (crossedRefillThreshold && medication) {
+          const pet = await getPet(medication.petId);
+          if (pet) raiseRefillAlert(medication, pet).catch(() => {});
+        }
+      },
+      onSnooze: async (medicationId, scheduledAt, minutes) => {
+        const med = await getMedication(medicationId);
+        const pet = med ? await getPet(med.petId) : null;
+        if (med && pet) await snoozeDose(med, pet, scheduledAt, minutes);
+      },
+    });
+    return () => sub.remove();
+  }, []);
+
   if (!ready) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: color.paper }}>
@@ -116,6 +143,7 @@ export default function RootLayout() {
         <Stack.Screen name="pets/new" options={{ title: "Add a pet", presentation: "modal", animation: "slide_from_bottom" }} />
         <Stack.Screen name="pets/edit" options={{ title: "Edit pet", presentation: "modal", animation: "slide_from_bottom" }} />
         <Stack.Screen name="pets/[id]" options={{ title: "" }} />
+        <Stack.Screen name="pets/share" options={{ title: "Share pet", presentation: "modal", animation: "slide_from_bottom" }} />
         <Stack.Screen name="meds/new" options={{ title: "Add medication", presentation: "modal", animation: "slide_from_bottom" }} />
         <Stack.Screen name="meds/[id]" options={{ title: "Medication" }} />
         <Stack.Screen name="history/[petId]" options={{ title: "History" }} />
@@ -128,6 +156,7 @@ export default function RootLayout() {
         <Stack.Screen name="auth/forgot-password" options={{ title: "Reset password" }} />
         <Stack.Screen name="auth/reset-password" options={{ title: "Reset password" }} />
         <Stack.Screen name="auth/verify-email" options={{ title: "Verify email", headerShown: false }} />
+        <Stack.Screen name="auth/household-accept" options={{ title: "Join household" }} />
       </Stack>
     </GestureHandlerRootView>
   );

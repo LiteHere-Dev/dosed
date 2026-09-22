@@ -8,15 +8,28 @@ import { r2Configured, presignUpload, getObject, deleteObject } from "../lib/r2"
 export const uploadsRouter = Router();
 uploadsRouter.use(requireAuth);
 
-const presignSchema = z.object({ petId: z.string().uuid(), ext: z.enum(["jpg", "png"]).default("jpg") });
+// `kind` picks the key prefix — "pet" for a pet's photo, "medication" for a
+// prescription-label photo (see src/lib/photos.ts uploadLocalPhoto). Both
+// still live under the caller's own userId prefix, so the ownership check
+// on GET/DELETE below doesn't need to change per kind.
+const presignSchema = z.object({
+  petId: z.string().uuid().optional(),
+  medicationId: z.string().uuid().optional(),
+  kind: z.enum(["pet", "medication"]).default("pet"),
+  ext: z.enum(["jpg", "png"]).default("jpg"),
+});
 const contentTypeFor = (ext: "jpg" | "png") => (ext === "png" ? "image/png" : "image/jpeg");
 
 // Key is scoped under the caller's own userId, so ownership is just a path
 // prefix check on the way out — no separate "who owns this photo" table.
 uploadsRouter.post("/presign", ah(async (req: AuthedRequest, res) => {
   if (!r2Configured) return res.status(503).json({ error: "storage_not_configured" });
-  const { petId, ext } = presignSchema.parse(req.body);
-  const key = `users/${req.userId}/pets/${petId}/${randomUUID()}.${ext}`;
+  const { petId, medicationId, kind, ext } = presignSchema.parse(req.body);
+  const ownerId = kind === "medication" ? medicationId : petId;
+  if (!ownerId) return res.status(400).json({ error: "missing_id" });
+  const key = kind === "medication"
+    ? `users/${req.userId}/medications/${ownerId}/${randomUUID()}.${ext}`
+    : `users/${req.userId}/pets/${ownerId}/${randomUUID()}.${ext}`;
   const contentType = contentTypeFor(ext);
   const uploadUrl = await presignUpload(key, contentType);
   // contentType is returned so the client sends the exact header value

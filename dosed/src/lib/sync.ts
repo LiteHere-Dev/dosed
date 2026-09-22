@@ -1,7 +1,7 @@
 import {
-  changedPetsSince, changedMedicationsSince, changedDoseLogsSince,
+  changedPetsSince, changedMedicationsSince, changedDoseLogsSince, changedHealthLogsSince,
   getLastPushedAt, setLastPushedAt, getLastPulledAt, setLastPulledAt,
-  upsertPetFromServer, upsertMedicationFromServer, upsertDoseLogFromServer,
+  upsertPetFromServer, upsertMedicationFromServer, upsertDoseLogFromServer, upsertHealthLogFromServer,
 } from "@/db/schema";
 import { pullChanges, pushChanges } from "./api";
 
@@ -25,21 +25,23 @@ export async function runSync(): Promise<void> {
 
 async function push() {
   const since = await getLastPushedAt();
-  const [pets, medications, doseLogs] = await Promise.all([
-    changedPetsSince(since), changedMedicationsSince(since), changedDoseLogsSince(since),
+  const [pets, medications, doseLogs, healthLogs] = await Promise.all([
+    changedPetsSince(since), changedMedicationsSince(since), changedDoseLogsSince(since), changedHealthLogsSince(since),
   ]);
-  if (pets.length === 0 && medications.length === 0 && doseLogs.length === 0) return;
-  const { serverTime } = await pushChanges({ pets, medications, doseLogs });
+  if (pets.length === 0 && medications.length === 0 && doseLogs.length === 0 && healthLogs.length === 0) return;
+  const { serverTime } = await pushChanges({ pets, medications, doseLogs, healthLogs });
   await setLastPushedAt(serverTime);
 }
 
 async function pull() {
   const since = await getLastPulledAt();
-  const { serverTime, pets, medications, doseLogs } = await pullChanges(since);
-  // Sequential, not Promise.all: medications reference petId and dose_logs
-  // reference medicationId via foreign keys, so pets must land first.
+  const { serverTime, pets, medications, doseLogs, healthLogs } = await pullChanges(since);
+  // Sequential, not Promise.all: medications reference petId and dose_logs/
+  // health_logs reference medicationId/petId via foreign keys, so pets
+  // must land first.
   for (const p of pets) await upsertPetFromServer(p);
   for (const m of medications) await upsertMedicationFromServer(m);
   for (const d of doseLogs) await upsertDoseLogFromServer(d);
+  for (const h of healthLogs) await upsertHealthLogFromServer(h);
   await setLastPulledAt(serverTime);
 }

@@ -1,8 +1,11 @@
 import { useState } from "react";
-import { View, Text, TextInput, ScrollView, Pressable, StyleSheet } from "react-native";
+import { View, Text, TextInput, ScrollView, Pressable, StyleSheet, Switch, Image, Alert } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { createMedication, getPet } from "@/db/schema";
+import * as ImagePicker from "expo-image-picker";
+import { Feather } from "@expo/vector-icons";
+import { createMedication, updateMedication, getPet } from "@/db/schema";
 import { rescheduleForMedication } from "@/lib/notifications";
+import { uploadLocalMedicationPhoto } from "@/lib/photos";
 import { runSync } from "@/lib/sync";
 import { Button } from "@/components/Button";
 import { color, font, space, radius } from "@/theme/tokens";
@@ -28,32 +31,70 @@ export default function NewMedication() {
   // custom wheel component neither the MVP nor the user asked for.
   const [timesText, setTimesText] = useState("08:00");
   const [intervalHours, setIntervalHours] = useState("8");
+  const [critical, setCritical] = useState(false);
+  const [totalQuantity, setTotalQuantity] = useState("");
+  const [refillThreshold, setRefillThreshold] = useState("");
+  const [localPhotoUri, setLocalPhotoUri] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const canSave = name.trim().length > 0 && Number(dosageValue) > 0;
+  const canSave = name.trim().length > 0 && Number(dosageValue) > 0 && !saving;
+
+  const takePhoto = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert("Permission needed", "Allow camera access in your device settings to photograph the prescription label.");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({ quality: 0.7, allowsEditing: true });
+    if (!result.canceled) setLocalPhotoUri(result.assets[0].uri);
+  };
 
   const save = async () => {
     if (!canSave) return;
-    const med = await createMedication({
-      petId,
-      name: name.trim(),
-      dosageValue: Number(dosageValue),
-      dosageUnit,
-      scheduleType,
-      times: scheduleType === "fixed_times" ? timesText.split(",").map((t) => t.trim()).filter(Boolean) : [],
-      intervalHours: scheduleType === "interval" ? Number(intervalHours) : null,
-      startDate: new Date().toISOString(),
-      endDate: null,
-      active: true,
-      notes: null,
-    });
-    const pet = await getPet(petId);
-    if (pet) await rescheduleForMedication(med, pet);
-    router.back();
-    runSync().catch(() => {});
+    setSaving(true);
+    try {
+      const qty = totalQuantity.trim() ? Number(totalQuantity) : null;
+      const threshold = refillThreshold.trim() ? Number(refillThreshold) : null;
+      const med = await createMedication({
+        petId,
+        name: name.trim(),
+        dosageValue: Number(dosageValue),
+        dosageUnit,
+        scheduleType,
+        times: scheduleType === "fixed_times" ? timesText.split(",").map((t) => t.trim()).filter(Boolean) : [],
+        intervalHours: scheduleType === "interval" ? Number(intervalHours) : null,
+        startDate: new Date().toISOString(),
+        endDate: null,
+        active: true,
+        notes: null,
+        critical,
+        totalQuantity: qty,
+        remainingQuantity: qty,
+        refillThreshold: threshold,
+        photoUri: null,
+      });
+
+      if (localPhotoUri) {
+        try {
+          const marker = await uploadLocalMedicationPhoto(med.id, localPhotoUri);
+          await updateMedication(med.id, { photoUri: marker });
+        } catch (e) {
+          console.warn("Prescription photo upload failed:", e);
+          Alert.alert("Photo not uploaded", "The medication was saved, but the prescription photo couldn't be uploaded.");
+        }
+      }
+
+      const pet = await getPet(petId);
+      if (pet) await rescheduleForMedication(med, pet);
+      router.back();
+      runSync().catch(() => {});
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: color.paper }} contentContainerStyle={{ padding: space.lg }}>
+    <ScrollView style={{ flex: 1, backgroundColor: color.paper }} contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl }}>
       <Field label="Medication name" value={name} onChangeText={setName} placeholder="Amoxicillin" autoFocus />
 
       <Text style={styles.label}>Dosage</Text>
@@ -91,7 +132,31 @@ export default function NewMedication() {
         />
       )}
 
-      <Button label="Save medication" onPress={save} style={{ marginTop: space.lg, opacity: canSave ? 1 : 0.5 }} />
+      <View style={styles.criticalRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.label}>Critical dose</Text>
+          <Text style={styles.hint}>Escalating reminders if it's missed (insulin, seizure meds, etc.)</Text>
+        </View>
+        <Switch value={critical} onValueChange={setCritical} trackColor={{ true: color.clay }} />
+      </View>
+
+      <Text style={[styles.label, { marginTop: space.md }]}>Refill tracking (optional)</Text>
+      <View style={{ flexDirection: "row", gap: space.sm, marginBottom: space.lg }}>
+        <Field label="Quantity on hand" value={totalQuantity} onChangeText={setTotalQuantity} placeholder={`e.g. 30 ${dosageUnit}s`} keyboardType="decimal-pad" style={{ flex: 1, marginBottom: 0 }} />
+        <Field label="Alert below" value={refillThreshold} onChangeText={setRefillThreshold} placeholder="e.g. 5" keyboardType="decimal-pad" style={{ flex: 1, marginBottom: 0 }} />
+      </View>
+
+      <Text style={styles.label}>Prescription label photo (optional)</Text>
+      <Pressable onPress={takePhoto} style={styles.photoPicker}>
+        {localPhotoUri ? <Image source={{ uri: localPhotoUri }} style={styles.photo} /> : (
+          <View style={{ alignItems: "center" }}>
+            <Feather name="camera" size={20} color={color.inkFaint} />
+            <Text style={styles.photoPlaceholder}>Take photo</Text>
+          </View>
+        )}
+      </Pressable>
+
+      <Button label={saving ? "Saving…" : "Save medication"} onPress={save} style={{ marginTop: space.lg, opacity: canSave ? 1 : 0.5 }} />
     </ScrollView>
   );
 }
@@ -120,6 +185,8 @@ function Chips<T extends string>({ options, labels, value, onChange }: { options
 
 const styles = StyleSheet.create({
   label: { fontFamily: font.body, fontSize: 13, color: color.inkFaint, marginBottom: space.xs },
+  hint: { fontFamily: font.body, fontSize: 12, color: color.inkFaint, marginTop: 2 },
+  criticalRow: { flexDirection: "row", alignItems: "center", gap: space.md, marginTop: space.md, paddingVertical: space.sm },
   input: {
     fontFamily: font.body, fontSize: 16, color: color.ink,
     backgroundColor: color.paperRaised, borderRadius: radius.sm,
@@ -130,4 +197,11 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: color.clay, borderColor: color.clay },
   chipLabel: { fontFamily: font.body, fontSize: 13, color: color.ink },
   chipLabelActive: { color: color.paper, fontWeight: "700" },
+  photoPicker: {
+    width: 96, height: 96, borderRadius: radius.sm, marginBottom: space.lg,
+    backgroundColor: color.paperRaised, borderWidth: 1, borderColor: color.hairline,
+    alignItems: "center", justifyContent: "center", overflow: "hidden",
+  },
+  photo: { width: 96, height: 96 },
+  photoPlaceholder: { fontFamily: font.body, fontSize: 11, color: color.inkFaint, marginTop: 4 },
 });

@@ -21,6 +21,7 @@ export default function EditPet() {
   const [breed, setBreed] = useState("");
   const [weight, setWeight] = useState("");
   const [notes, setNotes] = useState("");
+  const [vetEmail, setVetEmail] = useState("");
   const [newPhotoUri, setNewPhotoUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -33,12 +34,14 @@ export default function EditPet() {
       setBreed(p.breed ?? "");
       setWeight(p.weightKg != null ? String(p.weightKg) : "");
       setNotes(p.notes ?? "");
+      setVetEmail(p.vetEmail ?? "");
     });
   }, [petId]);
 
   const weightNum = weight.trim() === "" ? null : Number(weight.replace(",", "."));
   const weightInvalid = weightNum !== null && (!Number.isFinite(weightNum) || weightNum <= 0);
-  const canSave = !!pet && name.trim().length > 0 && species.trim().length > 0 && !weightInvalid && !saving;
+  const vetEmailInvalid = vetEmail.trim().length > 0 && !/\S+@\S+\.\S+/.test(vetEmail.trim());
+  const canSave = !!pet && name.trim().length > 0 && species.trim().length > 0 && !weightInvalid && !vetEmailInvalid && !saving;
 
   const pickPhoto = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -61,6 +64,7 @@ export default function EditPet() {
         breed: breed.trim() || null,
         weightKg: weightNum,
         notes: notes.trim() || null,
+        vetEmail: vetEmail.trim() || null,
       });
 
       if (newPhotoUri) {
@@ -112,6 +116,15 @@ export default function EditPet() {
           error={weightInvalid ? "Enter a number greater than 0" : undefined}
         />
         <Field label="Notes (optional)" value={notes} onChangeText={setNotes} placeholder="Allergies, vet details, anything worth remembering" multiline style={{ minHeight: 84, textAlignVertical: "top" }} />
+        <Field
+          label="Vet's email (optional)"
+          value={vetEmail}
+          onChangeText={setVetEmail}
+          placeholder="vet@clinic.com"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          error={vetEmailInvalid ? "Enter a valid email address" : undefined}
+        />
       </Animated.View>
 
       <Button label={saving ? "Saving…" : "Save changes"} onPress={save} style={{ marginTop: space.md, opacity: canSave ? 1 : 0.5 }} />

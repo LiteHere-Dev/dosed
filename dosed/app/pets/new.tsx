@@ -40,6 +40,7 @@ export default function NewPet() {
         weightKg: weight ? Number(weight) : null,
         photoUri: null,
         notes: null,
+        vetEmail: null,
       });
       // Upload after the pet exists locally so it's never lost if the
       // upload fails — the pet just ends up with no photo, retryable later.

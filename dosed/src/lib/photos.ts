@@ -2,19 +2,19 @@
 // uploadAsync / cacheDirectory / getInfoAsync etc. live in the /legacy entry now.
 // Importing them from the default entry throws at runtime, which is what broke uploads.
 import * as FileSystem from "expo-file-system/legacy";
-import { presignPhotoUpload, downloadPhoto, deletePhoto } from "./api";
+import { presignPhotoUpload, presignMedicationPhotoUpload, downloadPhoto, deletePhoto } from "./api";
 
-// photoUri on a Pet is one of: null, a local file:// URI (picked but not
-// yet uploaded — shouldn't normally persist past the picking screen), or
-// "r2:<key>" once uploaded. The r2: prefix keeps this string unambiguous
-// after it round-trips through sync as plain text.
+// photoUri on a Pet (or a Medication's prescription-label photo) is one of:
+// null, a local file:// URI (picked but not yet uploaded — shouldn't
+// normally persist past the picking screen), or "r2:<key>" once uploaded.
+// The r2: prefix keeps this string unambiguous after it round-trips
+// through sync as plain text.
 const R2_PREFIX = "r2:";
 const cacheDir = FileSystem.cacheDirectory + "pet-photos/";
 
-/** Uploads a locally-picked photo to R2 and returns the "r2:<key>" marker to store as photoUri. */
-export async function uploadLocalPhoto(petId: string, localUri: string): Promise<string> {
+async function upload(localUri: string, presign: (ext: "jpg" | "png") => ReturnType<typeof presignPhotoUpload>): Promise<string> {
   const ext = localUri.toLowerCase().split("?")[0].endsWith(".png") ? "png" : "jpg";
-  const { uploadUrl, key, contentType } = await presignPhotoUpload(petId, ext);
+  const { uploadUrl, key, contentType } = await presign(ext);
   // Content-Type must match exactly what was signed into uploadUrl's
   // query string, or R2 rejects the PUT with a signature mismatch.
   const info = await FileSystem.uploadAsync(uploadUrl, localUri, { httpMethod: "PUT", headers: { "Content-Type": contentType } });
@@ -26,6 +26,16 @@ export async function uploadLocalPhoto(petId: string, localUri: string): Promise
     await FileSystem.copyAsync({ from: localUri, to: cacheDir + key.replace(/\//g, "_") });
   } catch {}
   return R2_PREFIX + key;
+}
+
+/** Uploads a locally-picked pet photo to R2 and returns the "r2:<key>" marker to store as Pet.photoUri. */
+export async function uploadLocalPhoto(petId: string, localUri: string): Promise<string> {
+  return upload(localUri, (ext) => presignPhotoUpload(petId, ext));
+}
+
+/** Uploads a locally-photographed prescription label to R2 and returns the "r2:<key>" marker to store as Medication.photoUri. */
+export async function uploadLocalMedicationPhoto(medicationId: string, localUri: string): Promise<string> {
+  return upload(localUri, (ext) => presignMedicationPhotoUpload(medicationId, ext));
 }
 
 /**

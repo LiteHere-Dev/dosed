@@ -8,6 +8,8 @@ import { authRouter } from "./routes/auth";
 import { accountRouter } from "./routes/account";
 import { syncRouter } from "./routes/sync";
 import { uploadsRouter } from "./routes/uploads";
+import { householdRouter } from "./routes/household";
+import { notifyRouter } from "./routes/notify";
 import { errorHandler } from "./middleware/error";
 import { pool } from "./db";
 
@@ -34,6 +36,8 @@ app.use("/api/auth", authRouter);
 app.use("/api/account", accountRouter);
 app.use("/api/sync", syncRouter);
 app.use("/api/uploads", uploadsRouter);
+app.use("/api/household", householdRouter);
+app.use("/api/notify", notifyRouter);
 
 app.use(errorHandler);
 

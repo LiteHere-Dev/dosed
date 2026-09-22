@@ -11,7 +11,9 @@ const schema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   CORS_ORIGINS: z.string().default(""),
   // Optional: email sending. Left unset, the mailer logs to stdout instead
-  // of failing — see lib/mailer.ts.
+  // of failing — see lib/mailer.ts. RESEND_API_KEY takes priority over SMTP
+  // when both are set.
+  RESEND_API_KEY: z.string().optional(),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().default(587),
   SMTP_USER: z.string().optional(),

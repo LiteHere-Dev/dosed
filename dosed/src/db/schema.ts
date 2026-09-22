@@ -1,5 +1,5 @@
 import * as SQLite from "expo-sqlite";
-import type { Pet, Medication, DoseLog, DoseStatus } from "./types";
+import type { Pet, Medication, DoseLog, DoseStatus, HealthLog } from "./types";
 
 let db: SQLite.SQLiteDatabase | null = null;
 
@@ -94,6 +94,36 @@ async function migrate(d: SQLite.SQLiteDatabase) {
     version = 2;
   }
 
+  if (version < 3) {
+    // Smart adherence (critical-dose escalation, refill tracking, prescription
+    // photo), household sharing attribution, and health logs (side effects /
+    // mood / weight / stool quick-logs) — see README "recent features".
+    await d.execAsync(`
+      ALTER TABLE pets ADD COLUMN vetEmail TEXT;
+      ALTER TABLE medications ADD COLUMN critical INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE medications ADD COLUMN totalQuantity REAL;
+      ALTER TABLE medications ADD COLUMN remainingQuantity REAL;
+      ALTER TABLE medications ADD COLUMN refillThreshold REAL;
+      ALTER TABLE medications ADD COLUMN photoUri TEXT;
+      ALTER TABLE dose_logs ADD COLUMN loggedByUserId TEXT;
+      ALTER TABLE dose_logs ADD COLUMN loggedByLabel TEXT;
+      CREATE TABLE health_logs (
+        id TEXT PRIMARY KEY,
+        petId TEXT NOT NULL REFERENCES pets(id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        value TEXT NOT NULL,
+        note TEXT,
+        occurredAt TEXT NOT NULL,
+        loggedByUserId TEXT,
+        loggedByLabel TEXT,
+        updatedAt TEXT NOT NULL DEFAULT '1970-01-01T00:00:00.000Z',
+        deletedAt TEXT
+      );
+      CREATE INDEX idx_health_logs_pet_time ON health_logs(petId, occurredAt);
+    `);
+    version = 3;
+  }
+
   await d.runAsync("DELETE FROM schema_meta");
   await d.runAsync("INSERT INTO schema_meta (version) VALUES (?)", version);
 }
@@ -131,8 +161,8 @@ export async function createPet(input: Omit<Pet, "id" | "createdAt" | "updatedAt
   const d = await getDb();
   const pet: Pet = { ...input, id: uuid(), createdAt: now(), updatedAt: now(), deletedAt: null };
   await d.runAsync(
-    "INSERT INTO pets (id, name, species, breed, weightKg, photoUri, notes, createdAt, updatedAt, deletedAt) VALUES (?,?,?,?,?,?,?,?,?,?)",
-    pet.id, pet.name, pet.species, pet.breed, pet.weightKg, pet.photoUri, pet.notes, pet.createdAt, pet.updatedAt, pet.deletedAt
+    "INSERT INTO pets (id, name, species, breed, weightKg, photoUri, notes, vetEmail, createdAt, updatedAt, deletedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+    pet.id, pet.name, pet.species, pet.breed, pet.weightKg, pet.photoUri, pet.notes, pet.vetEmail, pet.createdAt, pet.updatedAt, pet.deletedAt
   );
   return pet;
 }
@@ -146,7 +176,7 @@ export async function setPetPhoto(id: string, photoUri: string): Promise<void> {
 /** Edits a pet's details. Stamps updatedAt so the change syncs (last-write-wins) to the person's other devices. */
 export async function updatePet(
   id: string,
-  patch: Partial<Pick<Pet, "name" | "species" | "breed" | "weightKg" | "photoUri" | "notes">>
+  patch: Partial<Pick<Pet, "name" | "species" | "breed" | "weightKg" | "photoUri" | "notes" | "vetEmail">>
 ): Promise<void> {
   const d = await getDb();
   const cols = Object.keys(patch) as (keyof typeof patch)[];
@@ -159,13 +189,14 @@ export async function updatePet(
 /** Applied by the sync engine when pulling a pet from the server — LWW, never regresses a newer local edit. */
 export async function upsertPetFromServer(pet: Pet): Promise<void> {  const d = await getDb();
   await d.runAsync(
-    `INSERT INTO pets (id, name, species, breed, weightKg, photoUri, notes, createdAt, updatedAt, deletedAt)
-     VALUES (?,?,?,?,?,?,?,?,?,?)
+    `INSERT INTO pets (id, name, species, breed, weightKg, photoUri, notes, vetEmail, createdAt, updatedAt, deletedAt)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)
      ON CONFLICT(id) DO UPDATE SET
        name=excluded.name, species=excluded.species, breed=excluded.breed, weightKg=excluded.weightKg,
-       photoUri=excluded.photoUri, notes=excluded.notes, updatedAt=excluded.updatedAt, deletedAt=excluded.deletedAt
+       photoUri=excluded.photoUri, notes=excluded.notes, vetEmail=excluded.vetEmail,
+       updatedAt=excluded.updatedAt, deletedAt=excluded.deletedAt
      WHERE excluded.updatedAt > pets.updatedAt`,
-    pet.id, pet.name, pet.species, pet.breed, pet.weightKg, pet.photoUri, pet.notes, pet.createdAt, pet.updatedAt, pet.deletedAt
+    pet.id, pet.name, pet.species, pet.breed, pet.weightKg, pet.photoUri, pet.notes, pet.vetEmail, pet.createdAt, pet.updatedAt, pet.deletedAt
   );
 }
 
@@ -192,7 +223,7 @@ export async function listActiveMedications(): Promise<Medication[]> {
 }
 
 function rowToMedication(row: any): Medication {
-  return { ...row, times: JSON.parse(row.times), active: !!row.active };
+  return { ...row, times: JSON.parse(row.times), active: !!row.active, critical: !!row.critical };
 }
 
 export async function createMedication(input: Omit<Medication, "id" | "updatedAt" | "deletedAt">): Promise<Medication> {
@@ -200,10 +231,12 @@ export async function createMedication(input: Omit<Medication, "id" | "updatedAt
   const med: Medication = { ...input, id: uuid(), updatedAt: now(), deletedAt: null };
   await d.runAsync(
     `INSERT INTO medications
-      (id, petId, name, dosageValue, dosageUnit, scheduleType, times, intervalHours, startDate, endDate, active, notes, updatedAt, deletedAt)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      (id, petId, name, dosageValue, dosageUnit, scheduleType, times, intervalHours, startDate, endDate, active, notes,
+       critical, totalQuantity, remainingQuantity, refillThreshold, photoUri, updatedAt, deletedAt)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     med.id, med.petId, med.name, med.dosageValue, med.dosageUnit, med.scheduleType,
     JSON.stringify(med.times), med.intervalHours, med.startDate, med.endDate, med.active ? 1 : 0, med.notes,
+    med.critical ? 1 : 0, med.totalQuantity, med.remainingQuantity, med.refillThreshold, med.photoUri,
     med.updatedAt, med.deletedAt
   );
   return med;
@@ -214,27 +247,75 @@ export async function setMedicationActive(id: string, active: boolean) {
   await d.runAsync("UPDATE medications SET active = ?, updatedAt = ? WHERE id = ?", active ? 1 : 0, now(), id);
 }
 
+/** Edits a medication's own fields (critical flag, refill tracking, photo, notes, etc). Doesn't touch schedule fields — reschedule notifications separately if those change. */
+export async function updateMedication(
+  id: string,
+  patch: Partial<Pick<Medication, "name" | "dosageValue" | "dosageUnit" | "notes" | "critical" | "totalQuantity" | "remainingQuantity" | "refillThreshold" | "photoUri">>
+): Promise<void> {
+  const d = await getDb();
+  const cols = Object.keys(patch) as (keyof typeof patch)[];
+  if (cols.length === 0) return;
+  const sets = cols.map((c) => `${c} = ?`).join(", ");
+  const values = cols.map((c) => {
+    const v = patch[c];
+    return typeof v === "boolean" ? (v ? 1 : 0) : (v as string | number | null | undefined) ?? null;
+  });
+  await d.runAsync(`UPDATE medications SET ${sets}, updatedAt = ? WHERE id = ?`, ...values, now(), id);
+}
+
+/**
+ * Logs a dose as taken/partial and, if the medication tracks quantity,
+ * decrements remainingQuantity by the amount given. Returns whether this
+ * decrement just crossed the refill threshold (from above it to at/below
+ * it) so the caller can fire a refill alert exactly once — see
+ * src/lib/refill.ts.
+ */
+export async function recordDoseAndDecrement(
+  medicationId: string,
+  scheduledAt: string,
+  status: DoseStatus,
+  amountTaken?: number
+): Promise<{ crossedRefillThreshold: boolean; medication: Medication | null }> {
+  await upsertDoseStatus(medicationId, scheduledAt, status, amountTaken);
+  const med = await getMedication(medicationId);
+  if (!med || med.remainingQuantity == null || (status !== "taken" && status !== "partial")) {
+    return { crossedRefillThreshold: false, medication: med };
+  }
+  const used = amountTaken ?? med.dosageValue;
+  const before = med.remainingQuantity;
+  const after = Math.max(0, before - used);
+  await updateMedication(medicationId, { remainingQuantity: after });
+  const threshold = med.refillThreshold;
+  const crossed = threshold != null && before > threshold && after <= threshold;
+  return { crossedRefillThreshold: crossed, medication: { ...med, remainingQuantity: after } };
+}
+
 export async function upsertMedicationFromServer(med: Medication): Promise<void> {
   const d = await getDb();
   await d.runAsync(
-    `INSERT INTO medications (id, petId, name, dosageValue, dosageUnit, scheduleType, times, intervalHours, startDate, endDate, active, notes, updatedAt, deletedAt)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    `INSERT INTO medications (id, petId, name, dosageValue, dosageUnit, scheduleType, times, intervalHours, startDate, endDate, active, notes,
+       critical, totalQuantity, remainingQuantity, refillThreshold, photoUri, updatedAt, deletedAt)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
      ON CONFLICT(id) DO UPDATE SET
        name=excluded.name, dosageValue=excluded.dosageValue, dosageUnit=excluded.dosageUnit,
        scheduleType=excluded.scheduleType, times=excluded.times, intervalHours=excluded.intervalHours,
        startDate=excluded.startDate, endDate=excluded.endDate, active=excluded.active, notes=excluded.notes,
+       critical=excluded.critical, totalQuantity=excluded.totalQuantity, remainingQuantity=excluded.remainingQuantity,
+       refillThreshold=excluded.refillThreshold, photoUri=excluded.photoUri,
        updatedAt=excluded.updatedAt, deletedAt=excluded.deletedAt
      WHERE excluded.updatedAt > medications.updatedAt`,
     med.id, med.petId, med.name, med.dosageValue, med.dosageUnit, med.scheduleType, JSON.stringify(med.times),
-    med.intervalHours, med.startDate, med.endDate, med.active ? 1 : 0, med.notes, med.updatedAt, med.deletedAt
+    med.intervalHours, med.startDate, med.endDate, med.active ? 1 : 0, med.notes,
+    med.critical ? 1 : 0, med.totalQuantity, med.remainingQuantity, med.refillThreshold, med.photoUri,
+    med.updatedAt, med.deletedAt
   );
 }
 
 // --- Dose logs ---
 
-export async function logDose(input: Omit<DoseLog, "id" | "updatedAt" | "deletedAt">): Promise<DoseLog> {
+export async function logDose(input: Omit<DoseLog, "id" | "updatedAt" | "deletedAt" | "loggedByUserId" | "loggedByLabel">): Promise<DoseLog> {
   const d = await getDb();
-  const log: DoseLog = { ...input, id: uuid(), updatedAt: now(), deletedAt: null };
+  const log: DoseLog = { ...input, id: uuid(), updatedAt: now(), deletedAt: null, loggedByUserId: null, loggedByLabel: null };
   await d.runAsync(
     "INSERT INTO dose_logs (id, medicationId, scheduledAt, takenAt, status, amountTaken, note, updatedAt, deletedAt) VALUES (?,?,?,?,?,?,?,?,?)",
     log.id, log.medicationId, log.scheduledAt, log.takenAt, log.status, log.amountTaken, log.note, log.updatedAt, log.deletedAt
@@ -242,6 +323,14 @@ export async function logDose(input: Omit<DoseLog, "id" | "updatedAt" | "deleted
   return log;
 }
 
+/**
+ * Marks a dose taken/skipped/etc. locally. loggedByUserId/loggedByLabel are
+ * NOT set here — this device doesn't reliably know "who's holding the
+ * phone" vs. "whose account it's signed into" for a shared household, so
+ * attribution is stamped server-side from the auth token on push (see
+ * server/src/routes/sync.ts) and comes back down on the next pull. Until
+ * then a dose this device just logged simply shows no "given by" label.
+ */
 export async function upsertDoseStatus(
   medicationId: string,
   scheduledAt: string,
@@ -266,13 +355,15 @@ export async function upsertDoseStatus(
 export async function upsertDoseLogFromServer(log: DoseLog): Promise<void> {
   const d = await getDb();
   await d.runAsync(
-    `INSERT INTO dose_logs (id, medicationId, scheduledAt, takenAt, status, amountTaken, note, updatedAt, deletedAt)
-     VALUES (?,?,?,?,?,?,?,?,?)
+    `INSERT INTO dose_logs (id, medicationId, scheduledAt, takenAt, status, amountTaken, note, loggedByUserId, loggedByLabel, updatedAt, deletedAt)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)
      ON CONFLICT(id) DO UPDATE SET
        takenAt=excluded.takenAt, status=excluded.status, amountTaken=excluded.amountTaken, note=excluded.note,
+       loggedByUserId=excluded.loggedByUserId, loggedByLabel=excluded.loggedByLabel,
        updatedAt=excluded.updatedAt, deletedAt=excluded.deletedAt
      WHERE excluded.updatedAt > dose_logs.updatedAt`,
-    log.id, log.medicationId, log.scheduledAt, log.takenAt, log.status, log.amountTaken, log.note, log.updatedAt, log.deletedAt
+    log.id, log.medicationId, log.scheduledAt, log.takenAt, log.status, log.amountTaken, log.note,
+    log.loggedByUserId, log.loggedByLabel, log.updatedAt, log.deletedAt
   );
 }
 
@@ -321,6 +412,51 @@ export async function deleteMedication(id: string): Promise<void> {
   await d.runAsync("UPDATE medications SET deletedAt = ?, updatedAt = ? WHERE id = ?", ts, ts, id);
 }
 
+// --- Health logs (side effects, mood, weight, stool) ---
+
+export async function createHealthLog(input: Omit<HealthLog, "id" | "updatedAt" | "deletedAt" | "loggedByUserId" | "loggedByLabel">): Promise<HealthLog> {
+  const d = await getDb();
+  const log: HealthLog = { ...input, id: uuid(), updatedAt: now(), deletedAt: null, loggedByUserId: null, loggedByLabel: null };
+  await d.runAsync(
+    "INSERT INTO health_logs (id, petId, type, value, note, occurredAt, updatedAt, deletedAt) VALUES (?,?,?,?,?,?,?,?)",
+    log.id, log.petId, log.type, log.value, log.note, log.occurredAt, log.updatedAt, log.deletedAt
+  );
+  return log;
+}
+
+export async function listHealthLogs(petId: string, fromIso: string, toIso: string): Promise<HealthLog[]> {
+  const d = await getDb();
+  return d.getAllAsync<HealthLog>(
+    "SELECT * FROM health_logs WHERE petId = ? AND occurredAt BETWEEN ? AND ? AND deletedAt IS NULL ORDER BY occurredAt DESC",
+    petId, fromIso, toIso
+  );
+}
+
+export async function deleteHealthLog(id: string): Promise<void> {
+  const d = await getDb();
+  const ts = now();
+  await d.runAsync("UPDATE health_logs SET deletedAt = ?, updatedAt = ? WHERE id = ?", ts, ts, id);
+}
+
+export async function upsertHealthLogFromServer(log: HealthLog): Promise<void> {
+  const d = await getDb();
+  await d.runAsync(
+    `INSERT INTO health_logs (id, petId, type, value, note, occurredAt, loggedByUserId, loggedByLabel, updatedAt, deletedAt)
+     VALUES (?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(id) DO UPDATE SET
+       type=excluded.type, value=excluded.value, note=excluded.note, occurredAt=excluded.occurredAt,
+       loggedByUserId=excluded.loggedByUserId, loggedByLabel=excluded.loggedByLabel,
+       updatedAt=excluded.updatedAt, deletedAt=excluded.deletedAt
+     WHERE excluded.updatedAt > health_logs.updatedAt`,
+    log.id, log.petId, log.type, log.value, log.note, log.occurredAt, log.loggedByUserId, log.loggedByLabel, log.updatedAt, log.deletedAt
+  );
+}
+
+export async function changedHealthLogsSince(sinceIso: string): Promise<HealthLog[]> {
+  const d = await getDb();
+  return d.getAllAsync<HealthLog>("SELECT * FROM health_logs WHERE updatedAt > ?", sinceIso);
+}
+
 // --- Sync support: rows changed locally since a cursor, for pushing ---
 
 export async function changedPetsSince(sinceIso: string): Promise<Pet[]> {
@@ -354,4 +490,16 @@ export async function getLastPushedAt(): Promise<string> {
 export async function setLastPushedAt(iso: string): Promise<void> {
   const d = await getDb();
   await d.runAsync("UPDATE sync_meta SET lastPushedAt = ? WHERE id = 0", iso);
+}
+
+/**
+ * Forces the next pull to fetch everything from scratch. Needed once,
+ * right after accepting a household invite: the newly-visible pet (and its
+ * medications/dose_logs/health_logs) may have an updatedAt far older than
+ * this device's cursor, so a normal incremental pull would miss it — see
+ * src/lib/household.ts.
+ */
+export async function resetSyncCursor(): Promise<void> {
+  const d = await getDb();
+  await d.runAsync("UPDATE sync_meta SET lastPulledAt = '1970-01-01T00:00:00.000Z' WHERE id = 0");
 }
