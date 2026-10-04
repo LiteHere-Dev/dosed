@@ -639,3 +639,5 @@ Local-first storage keeps the core experience available offline, while the synch
 
 **Dosed**  
 Built by [LiteHere-Dev](https://github.com/LiteHere-Dev)
+If you would like to support me, this is my Ethereum wallet:
+0x28992430488c209f1E631ff92170cBa7ceFA4D87
