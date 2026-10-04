@@ -639,5 +639,11 @@ Local-first storage keeps the core experience available offline, while the synch
 
 **Dosed**  
 Built by [LiteHere-Dev](https://github.com/LiteHere-Dev)
-If you would like to support me, this is my Ethereum wallet:
-0x28992430488c209f1E631ff92170cBa7ceFA4D87
+
+## ⚡ Support the Core
+
+If this open-source architecture saved you hours of development time, consider fueling the project directly. This goes straight to the independent developer building infrastructure in Eswatini—no corporate gatekeepers, no payment processors.
+
+* **Ethereum (ERC-20):** `0x28992430488c209f1E631ff92170cBa7ceFA4D87`
+* **Network:** Ethereum
+---
